@@ -902,7 +902,7 @@ export const ROUTES: RouteMeta[] = [
     label: '商城',
     icon: Headset,
     title: '商城',
-    titleBar: 'plain',
+    titleBar: 'hidden',
     titleBarTitle: '商城',
     nodes: [17],
     task: 'T008',
