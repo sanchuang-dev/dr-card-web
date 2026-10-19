@@ -125,7 +125,7 @@ const customPages: Record<string, ReactElement> = {
   '/luck': <Luck />,
   '/luck/result': <DrawSuccess />,
   '/card': <Card />,
-  /* T009：#65 选择接收人与 #66 转赠成功为同一条链路，用 ?state=success 切换 */
+  /* T009：#65 选择接收人与 #66 转赠成功共用同一实现；成功态只由真实接口返回驱动 */
   '/card/share': <CardShare />,
   '/card/verify': <ScanVerify />,
   '/card/verify/confirm': <ConfirmVerify />,

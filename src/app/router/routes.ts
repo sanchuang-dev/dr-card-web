@@ -980,12 +980,12 @@ export const ROUTES: RouteMeta[] = [
   },
   {
     path: '/card/share',
-    title: '选择转赠搭子',
-    nodes: [65],
+    title: '优惠卡转赠',
+    nodes: [65, 66],
     task: 'T009',
     entry: '卡包-第三方可用券「转赠」按钮，须携带当前券 id',
     returnTo: '卡包',
-    owner: '只读加载当前登录用户的真实搭子并单选；转赠接口尚未接入，不提供成功状态或写操作',
+    owner: '真实搭子单选 + POST /api/coupons/give；仅在接口成功返回后展示转赠成功，历史 ?state=success 不代表已转赠',
   },
   {
     path: '/card/verify',
