@@ -90,14 +90,22 @@ async function ensureNoticeSession(): Promise<void> {
   if (!getAuthSession()?.accessToken) await bootstrapAuthSession()
 }
 
-export async function refreshRemoteUnreadCount(): Promise<void> {
+export async function refreshRemoteUnreadCount(retryAfterSessionChange = true): Promise<void> {
   if (!isApi) return
   try {
     await ensureNoticeSession()
     const epoch = currentGeneration()
     const seq = ++countSequence
     const counts = await fetchNoticeUnreadCounts()
-    if (currentGeneration() === epoch && countSequence === seq) {
+    if (currentGeneration() !== epoch) {
+      // Axios can renew an expired Bearer token and retry this request successfully.
+      // Never apply an earlier session's count: fetch once more for the new token instead.
+      if (retryAfterSessionChange && getAuthSession()?.accessToken) {
+        await refreshRemoteUnreadCount(false)
+      }
+      return
+    }
+    if (countSequence === seq) {
       useApiNoticeStore.setState({ unreadCount: counts.total, countLoaded: true })
     }
   } catch {

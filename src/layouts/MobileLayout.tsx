@@ -7,13 +7,14 @@ import {
   useNavigationType,
   useViewTransitionState,
 } from 'react-router-dom'
-import { Bell, Settings, UserRound } from 'lucide-react'
+import { Settings, UserRound } from 'lucide-react'
 import BottomNav from '../components/mobile/BottomNav'
 import TitleBar from '../components/mobile/TitleBar'
+import NotificationBell from '../components/mobile/NotificationBell'
 import { findRouteByPathname, isLegacyTabPath } from '../app/router/routes'
 import { getRouteScope, isActiveFormalH5Route, isFormalH5TabPath } from '../app/router/routeScope'
 import { navigateWithH5ViewTransition } from '../app/router/h5Transition'
-import { useNotifications } from '../app/state/notifications'
+import { refreshRemoteUnreadCount, useNotifications } from '../app/state/notifications'
 import { protectedFixtureRedirect, useOverlay } from '../app/fixtures/useFixture'
 import H5ScrollRestoration from '../components/mobile/H5ScrollRestoration'
 import Toast from '../components/ui/Toast'
@@ -110,6 +111,7 @@ export default function MobileLayout() {
   const location = useLocation()
   const navigate = useNavigate()
   const previousShellPathname = useRef(location.pathname)
+  const previousNoticePathname = useRef(location.pathname)
   const scrollSourcePathname = previousShellPathname.current
   const { unreadCount, countLoaded } = useNotifications()
   const { open: openOverlay } = useOverlay()
@@ -164,6 +166,14 @@ export default function MobileLayout() {
   const isNotificationsPage = location.pathname === '/notifications'
   const allNotificationsRead = countLoaded && unreadCount === 0
 
+  // The shared notice hook fetches on initial mount/focus. Refresh only when returning
+  // to the member-center tab, avoiding a duplicate request on the first render.
+  useEffect(() => {
+    const enteringProfile = previousNoticePathname.current !== '/profile' && location.pathname === '/profile'
+    previousNoticePathname.current = location.pathname
+    if (enteringProfile) void refreshRemoteUnreadCount()
+  }, [location.pathname])
+
   useLayoutEffect(() => {
     previousShellPathname.current = location.pathname
   }, [location.pathname])
@@ -216,9 +226,12 @@ export default function MobileLayout() {
       )
       : route?.titleBarAction === 'notifications'
         ? (
-          <button type="button" aria-label="通知" onClick={() => navigateShell('/notifications')} className="flex h-9 w-9 items-center justify-center rounded-full text-text-primary active:bg-[rgba(89,55,15,0.06)]">
-            <Bell className="h-[22px] w-[22px]" />
-          </button>
+          <NotificationBell
+            unreadCount={unreadCount}
+            countLoaded={countLoaded}
+            showBadge={location.pathname === '/profile'}
+            onClick={() => navigateShell('/notifications')}
+          />
         )
         : undefined
 

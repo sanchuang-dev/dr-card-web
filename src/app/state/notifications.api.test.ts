@@ -22,7 +22,7 @@ vi.mock('../../services/notices', async importOriginal => {
 
 import {
   loadMoreRemoteNotices, loadRemoteNoticeDetail, markAllNotificationsRead,
-  refreshRemoteNotices, resetNotifications, useApiNoticeStore,
+  refreshRemoteNotices, refreshRemoteUnreadCount, resetNotifications, useApiNoticeStore,
 } from './notifications'
 
 const data = (id: number, isRead = 0) => ({
@@ -43,6 +43,18 @@ describe('#122 remote notice state', () => {
     mocks.fetchCounts.mockReset().mockResolvedValue({ total: 2, items: [] })
     mocks.readAll.mockReset()
     act(() => resetNotifications())
+  })
+
+  it('refetches the current user count after a 401 transparently rotates the auth token', async () => {
+    mocks.fetchCounts.mockImplementationOnce(async () => {
+      mocks.token = 'B' // Axios renewed the stored token while the count request was in flight.
+      return { total: 7, items: [] }
+    }).mockResolvedValueOnce({ total: 4, items: [] })
+
+    await act(async () => { await refreshRemoteUnreadCount() })
+    expect(mocks.fetchCounts).toHaveBeenCalledTimes(2)
+    expect(useApiNoticeStore.getState().countLoaded).toBe(true)
+    expect(useApiNoticeStore.getState().unreadCount).toBe(4)
   })
 
   it('loads backend notices with paging, not the preview fixture list', async () => {
