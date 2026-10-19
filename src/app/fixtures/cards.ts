@@ -55,8 +55,8 @@ export function resolveCardCoupon(id: string | null): CardCouponFixture {
 
 /**
  * 分享接收人夹具（T009 #65；人名、头像首字、单选交互取自 reference/分享.html「搭子列表」）
- * B-015 已关闭：按原型做「搭子列表」夹具，单选对象 → 下一步 → 分享成功；
- * 不做对方接受、次数限制、时效限制和持久化，分享后原卡包状态不变。
+ * id 使用仅存在于 preview Mock 的数值用户 ID，使 Mock 与真实 `/api/coupons/give`
+ * 共用同一 `friend_id` 契约；它们不是真实账号。
  */
 export interface ShareTargetFixture {
   id: string
@@ -66,10 +66,10 @@ export interface ShareTargetFixture {
 }
 
 export const SHARE_TARGET_FIXTURES: ShareTargetFixture[] = [
-  { id: 's1', name: '小美', initial: '小' },
-  { id: 's2', name: '阿轩', initial: '轩' },
-  { id: 's3', name: '泡泡同学', initial: '泡' },
-  { id: 's4', name: '室友小婷', initial: '婷' },
+  { id: '9001', name: '小美', initial: '小' },
+  { id: '9002', name: '阿轩', initial: '轩' },
+  { id: '9003', name: '泡泡同学', initial: '泡' },
+  { id: '9004', name: '室友小婷', initial: '婷' },
 ]
 
 /**

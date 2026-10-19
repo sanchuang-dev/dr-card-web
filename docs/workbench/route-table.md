@@ -70,7 +70,7 @@
 | 路径 | 节点 | 入口 | 返回目标 | 状态参数 |
 | --- | --- | --- | --- | --- |
 | `/card` | #54、#62–#64 | 底部 Tab「卡包」 | 底部 Tab | `?state=available/used/expired`；`?overlay=use&coupon=` |
-| `/card/share` | #65、#66 | 卡包-转赠 | 卡包 | `?coupon=`；`?state=success` |
+| `/card/share` | #65、#66 | 卡包-转赠 | 卡包 | `?coupon=`；成功态由 `POST /api/coupons/give` 返回后展示，不提供伪造成功 URL |
 | `/card/verify` | #67 | 卡包-使用 | 卡包 | — |
 | `/card/verify/confirm` | #67 | 扫码页 / 使用弹层 | 卡包 | `?state=done/repeat`；确认后回 `/card?state=used` |
 | `/redeem` | #68、#69 | 我的-卡券兑换 | 我的 / 卡包 | `?state=success/format/invalid/used/network`（2026-10-12 D-083 合同：至少 10 位，原值核兑；原型 12 位为历史） |

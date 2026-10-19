@@ -348,7 +348,7 @@ test('@formal-h5 H022 prototype states stay on one route implementation', async 
   await page.goto('/card/share?coupon=91001', { waitUntil: 'domcontentloaded' })
   await expectHealthyFormalRoute(page)
   expect(new URL(page.url()).pathname + new URL(page.url()).search).toBe('/card/share?coupon=91001')
-  await expect(page.getByRole('button', { name: '确认选择' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: '确认转赠' })).toBeDisabled()
 
   // Historic success URL must not imply a transfer without coupon ID or API.
   await page.goto('/card/share?state=success', { waitUntil: 'domcontentloaded' })
@@ -363,6 +363,27 @@ test('@formal-h5 H022 prototype states stay on one route implementation', async 
   await page.goto('/service/chat/human?state=connected', { waitUntil: 'domcontentloaded' })
   await expectHealthyFormalRoute(page)
   await expect(page.locator('[data-queue-state]')).toHaveAttribute('data-queue-state', 'connected')
+
+  expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([])
+})
+
+test('@formal-h5 card transfer shows success only after the give API confirms it', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page)
+
+  await page.goto('/card/share?coupon=91001', { waitUntil: 'domcontentloaded' })
+  await expectHealthyFormalRoute(page)
+  await page.getByRole('radio', { name: '小美' }).click()
+  await page.getByRole('button', { name: '确认转赠' }).click()
+
+  await expect(page.getByRole('heading', { level: 2, name: '转赠成功' })).toBeVisible()
+  await expect(page.getByText('已成功转赠给「小美」')).toBeVisible()
+  await expect(page.getByText('演示环境：本次转赠仅模拟接口成功，未真实转出卡券')).toBeVisible()
+
+  await page.getByRole('button', { name: '查看我的卡包' }).click()
+  await expect(page).toHaveURL(/\/card\?state=available$/)
+  await expectHealthyFormalRoute(page)
+  await expect(page.getByText('Mock 洗护体验券')).toBeVisible()
+  await expect(page.getByText('Mock 新人体验活动')).toHaveCount(0)
 
   expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([])
 })

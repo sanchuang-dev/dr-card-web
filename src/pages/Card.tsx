@@ -554,7 +554,16 @@ export default function Card() {
               expired={tab === 'expired'}
               onUse={() => openUseSheet(coupon)}
               onShare={() => {
-                if (coupon.origin !== 'local' && coupon.id) navigate('/card/share?coupon=' + encodeURIComponent(coupon.id))
+                if (coupon.origin === 'local' || !coupon.id) return
+                navigate('/card/share?coupon=' + encodeURIComponent(coupon.id), {
+                  state: {
+                    couponPreview: {
+                      name: coupon.name,
+                      amountLabel: coupon.amountLabel,
+                      validityLabel: coupon.validityLabel,
+                    },
+                  },
+                })
               }}
             />
           ))}
