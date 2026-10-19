@@ -50,14 +50,6 @@ function MockServiceChat() {
 
   /** T013R5：企微二维码弹层 —— 与壳层 TitleBar 联动，靠 `#wecom` hash 触发 */
   const [wecomOpen, setWecomOpen] = useState(false)
-  // Compatibility: the visible "人工" entry opens the original #wecom sheet.
-  // Keep requestHuman() and the existing human-stage implementation unchanged.
-  const openWecom = () => {
-    navigate(
-      { pathname: location.pathname, search: location.search, hash: '#wecom' },
-      { replace: true, state: location.state },
-    )
-  }
   const closeWecom = () => {
     setWecomOpen(false)
     /* H016：通过 Router replace 清 hash，保留当前 history entry/state，不绕过 React Router。 */
@@ -150,7 +142,7 @@ function MockServiceChat() {
 
   const send = () => {
     const text = draft.trim()
-    if (!text) return
+    if (!text || humanStage === 'queuing') return
     setDraft('')
 
     /** T013R4：输入「人工客服」等同于点击页内「人工」按钮，触发人工客服状态机 */
@@ -184,15 +176,15 @@ function MockServiceChat() {
       : CHAT_BOT.inputPlaceholder
 
   return (
-    <PageContainer className="flex min-h-full flex-col pb-0" inset={false}>
-      {/* T013R5：「企微客服」pill 移回壳层 TitleBar 右侧，页内顶部区只保留居中小字。 */}
+    <PageContainer className="flex min-h-full min-w-0 w-full flex-col pb-0" inset={false}>
+      {/* 标题栏提供独立的福利官二维码入口；底部人工按钮只负责聊天转接。 */}
       <div className="px-4 pt-3">
         <p className="text-center text-xs text-text-tertiary">
           AI 客服 {CHAT_BOT.name} 为您服务
         </p>
       </div>
 
-      <div className="flex-1 px-4 pb-4 pt-4" data-human-stage={humanStage}>
+      <div className="min-w-0 w-full flex-1 px-4 pb-4 pt-4" data-human-stage={humanStage}>
         <ChatMessageList messages={messages} onRetry={retry} />
       </div>
 
@@ -201,14 +193,15 @@ function MockServiceChat() {
           <button
             type="button"
             data-chat-human-entry
-            onClick={openWecom}
+            onClick={requestHuman}
+            disabled={humanStage !== 'idle'}
             className="flex h-11 w-11 flex-none flex-col items-center justify-center rounded-container bg-surface text-[10px] font-medium text-text-brand shadow-sm active:bg-surface-selected disabled:opacity-50"
           >
             <Headset className="h-4 w-4" aria-hidden />
             人工
           </button>
 
-          <div className="flex min-h-11 flex-1 items-center rounded-container border-2 border-transparent bg-surface px-3 focus-within:border-border-focused">
+          <div className="flex min-h-11 min-w-0 flex-1 items-center rounded-container border-2 border-transparent bg-surface px-3 focus-within:border-border-focused">
             <input
               type="text"
               inputMode="text"
@@ -224,7 +217,7 @@ function MockServiceChat() {
               placeholder={inputPlaceholder}
               disabled={inputDisabled}
               aria-label="输入你的问题"
-              className="h-11 w-full bg-transparent text-sm text-text-primary outline-none placeholder:text-text-placeholder disabled:cursor-not-allowed"
+              className="h-11 min-w-0 w-full bg-transparent text-sm text-text-primary outline-none placeholder:text-text-placeholder disabled:cursor-not-allowed"
             />
           </div>
 
@@ -232,7 +225,7 @@ function MockServiceChat() {
             type="button"
             data-chat-send
             onClick={send}
-            disabled={!draft.trim()}
+            disabled={inputDisabled || !draft.trim()}
             aria-label="发送"
             className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-primary text-text-inverse active:bg-primary-pressed disabled:bg-disabled disabled:text-text-disabled"
           >
@@ -241,11 +234,9 @@ function MockServiceChat() {
         </div>
       </div>
 
-      {/* 兼容性处理：右上企微入口隐藏；底部「人工」复用原 #wecom 弹层。
-        * 既有 requestHuman()／人工状态机保留，单独治理，不在此变更删除。 */}
       <BottomSheet
         open={wecomOpen}
-        title={CHAT_HUMAN_PROMPT.title}
+        title="品牌福利官"
         onClose={closeWecom}
         actions={
           <div className="flex justify-center">

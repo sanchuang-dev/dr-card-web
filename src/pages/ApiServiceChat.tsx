@@ -36,17 +36,12 @@ export default function ApiServiceChat() {
   }
   const inputDisabled = history.status !== 'ready' || chat.busy || chat.blocked ||
     ((chat.humanAwait || human.active) && human.status !== 'connected')
+  const humanEntryDisabled = history.status !== 'ready' || chat.busy || chat.blocked ||
+    chat.humanAwait || human.active || !human.canTransfer
   const messages = combineChatMessages(history.messages, chat.messages)
   const location = useLocation()
   const navigate = useNavigate()
   const [wecomOpen, setWecomOpen] = useState(false)
-
-  // Compatibility: reuse the exact #wecom action previously owned by the titlebar.
-  // useHumanChat()/human.transfer() and its real Socket.IO flow are deliberately retained.
-  const openWecom = () => {
-    navigate({ pathname: location.pathname, search: location.search, hash: '#wecom' },
-      { replace: true, state: location.state })
-  }
 
   const closeWecom = () => {
     setWecomOpen(false)
@@ -60,11 +55,11 @@ export default function ApiServiceChat() {
   }, [location.hash])
 
   return (
-    <PageContainer className="flex min-h-full flex-col pb-0" inset={false}>
+    <PageContainer className="flex min-h-full min-w-0 w-full flex-col pb-0" inset={false}>
       <div className="px-4 pt-3">
         <p className="text-center text-xs text-text-tertiary">AI 客服 {CHAT_BOT.name} 为您服务</p>
       </div>
-      <section className="flex-1 px-4 pb-4 pt-4" aria-label="客服聊天历史" data-human-stage={chat.humanAwait || human.active ? 'pending' : 'idle'}>
+      <section className="min-w-0 w-full flex-1 px-4 pb-4 pt-4" aria-label="客服聊天历史" data-human-stage={chat.humanAwait || human.active ? 'pending' : 'idle'}>
         {history.status === 'loading' ? (
           <p role="status" className="py-8 text-center text-sm text-text-secondary">正在加载客服历史…</p>
         ) : history.status === 'error' ? (
@@ -98,22 +93,10 @@ export default function ApiServiceChat() {
       </section>
 
       <div className="sticky bottom-0 border-t border-border-subtle bg-background px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
-        {chat.error ? (
+        {chat.error && (
           <div role="alert" className="mb-3 rounded-container bg-surface px-3 py-2 text-xs text-danger-text">
             <p>{chat.error}</p>
             <Button variant="outline" onClick={() => { chat.clear(); history.reload() }}>检查最新历史记录</Button>
-          </div>
-        ) : (
-          <div role="status" className="mb-2 text-center text-xs text-text-secondary">
-            {chat.phase === 'sending' ? '正在发送消息…'
-              : chat.phase === 'streaming' ? 'AI 正在流式回复…'
-              : chat.phase === 'syncing' ? '正在核对服务端消息记录…'
-              : human.transferring ? '正在请求转人工…'
-              : (chat.humanAwait || human.active) ? (human.status === 'connected'
-                ? '已请求人工服务，等待客服真实回复（暂无接入人数或时间信息）'
-                : '已进入人工模式，客服消息连接中断，请检查历史')
-              : human.status === 'connected' ? 'AI 可用；可申请转人工，接入坐席状态未知'
-              : 'AI 可用；人工消息通道尚未连通'}
           </div>
         )}
         {human.error && <div role="alert" className="mb-2 text-center text-xs text-danger-text">
@@ -126,12 +109,14 @@ export default function ApiServiceChat() {
         </div>}
         <div className="flex items-end gap-2">
           <button type="button" data-chat-human-entry
-            onClick={openWecom}
+            onClick={() => { void human.transfer() }}
+            disabled={humanEntryDisabled}
             aria-label="人工客服"
+            title={humanEntryDisabled ? '人工通道暂不可用' : '转接人工客服'}
             className="flex h-11 w-11 flex-none flex-col items-center justify-center rounded-container bg-surface text-[10px] font-medium text-text-brand shadow-sm disabled:opacity-50">
             <Headset className="h-4 w-4" aria-hidden />人工
           </button>
-          <div className="flex min-h-11 flex-1 items-center rounded-container border-2 border-transparent bg-surface px-3 focus-within:border-border-focused">
+          <div className="flex min-h-11 min-w-0 flex-1 items-center rounded-container border-2 border-transparent bg-surface px-3 focus-within:border-border-focused">
             <input type="text" value={draft} maxLength={5000} autoComplete="off"
               onChange={event => setDraft(event.target.value)}
               onKeyDown={event => {
@@ -139,7 +124,7 @@ export default function ApiServiceChat() {
               }}
               disabled={inputDisabled} aria-label="输入你的问题"
               placeholder={(chat.humanAwait || human.active) ? '向人工客服发消息（HTTP 发送）' : '请输入你的问题'}
-              className="h-11 w-full bg-transparent text-sm text-text-primary outline-none placeholder:text-text-placeholder disabled:cursor-not-allowed" />
+              className="h-11 min-w-0 w-full bg-transparent text-sm text-text-primary outline-none placeholder:text-text-placeholder disabled:cursor-not-allowed" />
           </div>
           {chat.busy ? (
             <button type="button" data-chat-cancel onClick={chat.cancel} aria-label="中止等待回复"
@@ -155,10 +140,9 @@ export default function ApiServiceChat() {
           )}
         </div>
       </div>
-      {/* 「人工」入口现复用原 #wecom 弹层；真实 human.transfer()/Socket.IO 链路保持原样。 */}
       <BottomSheet
         open={wecomOpen}
-        title={CHAT_HUMAN_PROMPT.title}
+        title="品牌福利官"
         onClose={closeWecom}
         actions={<div className="flex justify-center"><Button variant="ghost" onClick={closeWecom}>{CHAT_HUMAN_PROMPT.cancelLabel}</Button></div>}
       >

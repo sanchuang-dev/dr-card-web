@@ -28,13 +28,16 @@ try {
   assert.equal(route('/onboarding/success').implementationVariant, 'onboarding')
 
   const stateFamilies = {
-    '/card/share': ['success'],
     '/card/verify/confirm': ['done', 'repeat'],
     '/orders': ['completed', 'ongoing', 'aftersale', 'empty'],
     '/address': ['empty'],
     '/address/new': ['invalid'],
     '/service/chat/human': ['queuing', 'connected'],
   }
+
+  // Coupon transfer has no backend write API yet: the former fixture-only
+  // "success" state must never be advertised as a business success.
+  assert.ok(!(route('/card/share').states ?? []).some((state) => state.key === 'success'))
 
   for (const [path, expectedStates] of Object.entries(stateFamilies)) {
     const keys = new Set((route(path).states ?? []).map((state) => state.key))

@@ -980,13 +980,12 @@ export const ROUTES: RouteMeta[] = [
   },
   {
     path: '/card/share',
-    title: '分享',
-    nodes: [65, 66],
+    title: '选择转赠搭子',
+    nodes: [65],
     task: 'T009',
-    entry: '卡包-可用券「转赠」按钮（reference/卡包.html 原型按钮文案；本页标题按 reference/分享.html 为「分享」）',
+    entry: '卡包-第三方可用券「转赠」按钮，须携带当前券 id',
     returnTo: '卡包',
-    states: [{ key: 'success', node: 66, label: '分享成功' }],
-    owner: '分享对象选择与分享成功（T009；B-015 已关闭，按原型做搭子列表夹具，不做接受/次数/时效/持久化）',
+    owner: '只读加载当前登录用户的真实搭子并单选；转赠接口尚未接入，不提供成功状态或写操作',
   },
   {
     path: '/card/verify',

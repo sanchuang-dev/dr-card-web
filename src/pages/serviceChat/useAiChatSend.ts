@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChatMessage } from '../../app/fixtures'
-import { getAuthSession } from '../../services/auth/session'
+import { getAuthSession, isApiSignaturePreflightError } from '../../services/auth/session'
 import type { ChatHistoryMessage } from '../../services/chatMessages'
 import { sendChatStream } from '../../services/chatStream'
 
@@ -155,11 +155,14 @@ export function useAiChatSend(syncLatest: () => Promise<ChatHistoryMessage[] | n
       return true
     } catch (error) {
       if (!alive()) return false
+      // Signature preflight happens before fetch; the optimistic message was never sent.
+      // All other failures retain the history-check warning and no-auto-retry guard.
+      const noRequestSent = isApiSignaturePreflightError(error)
       update(previous => ({
         ...previous, phase: 'failed',
         messages: previous.messages.map(item => item.id === userId
-          ? { ...item, status: 'sent' } : item),
-        error: errorText(error) + '。' + CHECK_HISTORY,
+          ? { ...item, status: noRequestSent ? 'failed' : 'sent' } : item),
+        error: noRequestSent ? errorText(error) : errorText(error) + '。' + CHECK_HISTORY,
       }))
       return false
     } finally {

@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   request: vi.fn(),
   getLoginToken: vi.fn(),
   setAuthHeadersProvider: vi.fn(),
+  setSignatureCredentialsProvider: vi.fn(),
   setUnauthorizedHandler: vi.fn(),
   setAuthFailureHandler: vi.fn(),
 }))
@@ -24,6 +25,7 @@ vi.mock('../http/httpClient', () => ({
     request: mocks.request,
   }),
   setHttpAuthHeadersProvider: mocks.setAuthHeadersProvider,
+  setHttpSignatureCredentialsProvider: mocks.setSignatureCredentialsProvider,
   setHttpUnauthorizedHandler: mocks.setUnauthorizedHandler,
   setHttpAuthFailureHandler: mocks.setAuthFailureHandler,
 }))
@@ -34,6 +36,7 @@ describe('bootstrap auth 401 handling', () => {
     mocks.request.mockReset()
     mocks.getLoginToken.mockReset()
     mocks.setAuthHeadersProvider.mockReset()
+    mocks.setSignatureCredentialsProvider.mockReset()
     mocks.setUnauthorizedHandler.mockReset()
     mocks.setAuthFailureHandler.mockReset()
     mocks.getLoginToken.mockResolvedValue({ token: 'native-token', salt: 'native-salt' })

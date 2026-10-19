@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { AlertCircle, CheckCircle2, Loader2, Ticket, XCircle } from 'lucide-react'
+import { useBlocker, useNavigate } from 'react-router-dom'
+import { AlertCircle, CheckCircle2, Ticket, XCircle } from 'lucide-react'
 import DebugPanel from '../components/mobile/DebugPanel'
 import { isAppError } from '../services/http'
 import { runtimePolicy } from '../app/config/runtime'
 import { redeemCardCode, type RedemptionReceipt } from '../services/redeemCode'
 import PageContainer from '../components/mobile/PageContainer'
+import ProjectSelectScreen from './exchange/ProjectSelectScreen'
 import { useFixtureState } from '../app/fixtures/useFixture'
 import { findRouteByPathname } from '../app/router/routes'
 import {
@@ -34,6 +35,19 @@ export default function Redeem() {
   const [outcome, setOutcome] = useState<RedeemOutcome | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [receipt, setReceipt] = useState<RedemptionReceipt | null>(null)
+  const [pendingCode, setPendingCode] = useState<string | null>(null)
+  const submissionLock = useRef(false)
+  // A full-screen in-page step must consume BrowserRouter POP/back without
+  // pushing an artificial history entry (UX-E). Submission stays protected.
+  const blocker = useBlocker(pendingCode !== null)
+  useEffect(() => {
+    if (blocker.state !== 'blocked') return
+    if (!submissionLock.current && !submitting) {
+      setPendingCode(null)
+      setErrorMessage(null)
+    }
+    blocker.reset()
+  }, [blocker, submitting])
   const timers = useRef<number[]>([])
 
   const trimmed = code
@@ -46,6 +60,7 @@ export default function Redeem() {
     if (!key || !(key in REDEEM_SAMPLE_CODES)) return
     setCode(REDEEM_SAMPLE_CODES[key])
     setReceipt(null)
+    setPendingCode(null)
     setOutcome(key)
     setErrorMessage(null)
     setSubmitting(false)
@@ -58,42 +73,61 @@ export default function Redeem() {
   }
 
   const clear = () => {
+    setPendingCode(null)
     setReceipt(null)
     setCode('')
     setOutcome(null)
     setErrorMessage(null)
   }
 
-  const submit = async () => {
-    if (trimmed.length < REDEEM_CODE_RULE.minLength || submitting) return
+  const openProjectSelector = () => {
+    if (code.length < REDEEM_CODE_RULE.minLength || submitting) return
+    // Freeze exactly what the user entered. Searching must not alter the code.
+    setPendingCode(code)
+    setErrorMessage(null)
+    setOutcome(null)
+  }
+
+  const submit = async (projectId: number) => {
+    if (!pendingCode || pendingCode.length < REDEEM_CODE_RULE.minLength ||
+        submitting || submissionLock.current) return
+    const originalCode = pendingCode
+    submissionLock.current = true
     setOutcome(null)
     setReceipt(null)
     setErrorMessage(null)
     setSubmitting(true)
     if (runtimePolicy.dataMode === 'mock') {
-      /** Mock 只在预览环境产生确定性演示结果，API 模式绝不模拟成功。 */
+      /** Legacy preview fixture is explicitly mock-only; no real issue occurs here. */
       track(() => {
+        const next = resolveRedeemOutcome(originalCode)
+        if (next === 'success') {
+          setOutcome('success')
+          setPendingCode(null)
+        } else {
+          setErrorMessage(REDEEM_FEEDBACK[next].text)
+        }
         setSubmitting(false)
-        const next = resolveRedeemOutcome(trimmed)
-        setOutcome(next)
-        if (next !== 'success') track(() => setOutcome(null), 2000)
+        submissionLock.current = false
       }, 700)
       return
     }
     try {
-      const nextReceipt = await redeemCardCode(trimmed)
+      const nextReceipt = await redeemCardCode(originalCode, projectId)
       setReceipt(nextReceipt)
+      setPendingCode(null)
       setOutcome('success')
     } catch (error) {
       if (isAppError(error) && error.kind === 'contract') {
         setErrorMessage('兑换结果暂时无法确认，请稍后重试')
       } else if (isAppError(error) && (error.kind === 'network' || error.kind === 'timeout')) {
-        setErrorMessage('网络异常，请稍后重试')
+        setErrorMessage('网络异常，兑换结果可能尚未确认，请先到卡包查看')
       } else {
         setErrorMessage(error instanceof Error ? error.message : '兑换失败，请稍后重试')
       }
     } finally {
       setSubmitting(false)
+      submissionLock.current = false
     }
   }
 
@@ -106,7 +140,7 @@ export default function Redeem() {
           </span>
           <h1 className="text-lg font-semibold text-text-primary">兑换成功</h1>
           <p className="max-w-[260px] text-sm leading-6 text-text-secondary">{REDEEM_FEEDBACK.success.text}</p>
-          {receipt && <p className="max-w-[260px] text-sm font-medium text-text-primary">{receipt.card_name}</p>}
+          {receipt && <p className="max-w-[260px] text-sm font-medium text-text-primary">已提交卡券兑换，可前往卡包查看</p>}
         </div>
 
         <section className="mx-4 mt-5 flex items-center gap-3 rounded-container bg-surface p-3 shadow-sm">
@@ -119,7 +153,7 @@ export default function Redeem() {
           <div className="min-w-0 flex-1">
             <p className="text-xs text-text-tertiary">兑换码</p>
             <p className="mt-0.5 truncate text-base font-semibold tracking-[0.08em] text-text-primary">{trimmed}</p>
-            {receipt && <p className="mt-1 truncate text-xs text-text-secondary">卡券编号：{receipt.card_sn}</p>}
+
           </div>
         </section>
 
@@ -172,17 +206,10 @@ export default function Redeem() {
       <button
         type="button"
         disabled={trimmed.length < REDEEM_CODE_RULE.minLength || submitting}
-        onClick={submit}
+        onClick={openProjectSelector}
         className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary text-base font-medium text-text-inverse active:bg-primary-pressed disabled:bg-disabled disabled:text-text-disabled"
       >
-        {submitting ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            提交中
-          </>
-        ) : (
-          '确认兑换'
-        )}
+        选择适用片区
       </button>
 
       {feedback && (
@@ -196,6 +223,21 @@ export default function Redeem() {
           {feedback.ok ? <CheckCircle2 className="h-[18px] w-[18px]" /> : <AlertCircle className="h-[18px] w-[18px]" />}
           {feedback.text}
         </div>
+      )}
+
+      {pendingCode !== null && (
+        <ProjectSelectScreen
+          mode="code"
+          code={pendingCode}
+          submitting={submitting}
+          submitError={errorMessage}
+          onClose={() => {
+            if (submitting) return
+            setPendingCode(null)
+            setErrorMessage(null)
+          }}
+          onConfirm={(projectId) => { void submit(projectId) }}
+        />
       )}
 
       <DebugPanel route={route} />

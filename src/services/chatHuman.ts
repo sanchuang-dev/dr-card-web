@@ -1,8 +1,9 @@
 import { io, type Socket } from 'socket.io-client'
 import { runtimePolicy } from '../app/config/runtime'
-import { getAuthSession, refreshChatAuthAfterUnauthorized } from './auth/session'
+import { getApiSignatureCredentials, getAuthSession, refreshChatAuthAfterUnauthorized } from './auth/session'
 import { chatRecordSchema, type BackendChatRecord } from './chatMessages'
 import { AppError, createBusinessError, createContractError } from './http'
+import { signCardApiUrl } from './http/apiSignature'
 
 export const CHAT_TRANSFER_PATH = '/api/chatmessages/transfer'
 const transferResultSchema = { mode: 'human' } as const
@@ -92,11 +93,16 @@ export async function transferChatToHuman(signal?: AbortSignal): Promise<void> {
   const base = runtimePolicy.apiBaseUrl
   if (!token) throw new AppError({ kind: 'http', status: 401, message: '请先登录' })
   if (!base) throw new AppError({ kind: 'configuration', message: '人工客服接口未配置' })
+  // Complete signature preflight before entering the network-only error handler.
+  // Missing Native credentials cannot be mistaken for an uncertain transfer.
+  const credentials = await getApiSignatureCredentials()
+  const url = signCardApiUrl(base.replace(/\/+$/, '').replace(/\/api$/, '') + CHAT_TRANSFER_PATH,
+    undefined, {}, credentials)
   let response: Response
   try {
-    response = await fetch(base.replace(/\/+$/, '').replace(/\/api$/, '') + CHAT_TRANSFER_PATH, {
+    response = await fetch(url, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json',
+      headers: { Authorization: `Bearer ${token}`, salt: credentials.salt, 'Content-Type': 'application/json',
         Accept: 'application/json' },
       body: JSON.stringify({}),
       signal,

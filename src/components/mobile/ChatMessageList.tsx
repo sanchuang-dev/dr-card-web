@@ -31,7 +31,7 @@ export default function ChatMessageList({
             data-chat-message
             data-chat-role={message.role}
             data-chat-status={message.status}
-            className={`flex gap-2 ${isBot ? 'justify-start' : 'justify-end'}`}
+            className={`flex w-full min-w-0 gap-2 ${isBot ? 'justify-start' : 'justify-end'}`}
           >
             {isBot && (
               <span
@@ -44,7 +44,8 @@ export default function ChatMessageList({
 
             <div className={`flex min-w-0 max-w-[76%] flex-col ${isBot ? 'items-start' : 'items-end'}`}>
               <div
-                className={`whitespace-pre-wrap break-words rounded-container px-3.5 py-2.5 text-sm leading-6 ${
+                data-chat-bubble
+                className={`min-w-0 max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] rounded-container px-3.5 py-2.5 text-sm leading-6 ${
                   isBot
                     ? 'bg-surface text-text-primary shadow-sm'
                     : `bg-primary text-text-inverse ${message.status === 'sending' ? 'opacity-70' : ''}`
@@ -53,7 +54,7 @@ export default function ChatMessageList({
                 {hasChatRichText(message.text) ? (
                   <div
                     data-chat-rich-text
-                    className="whitespace-normal [&_blockquote]:border-l-2 [&_blockquote]:pl-2 [&_code]:font-mono [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
+                    className="min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere] [&_blockquote]:border-l-2 [&_blockquote]:pl-2 [&_code]:font-mono [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
                     dangerouslySetInnerHTML={{ __html: sanitizeChatRichText(message.text) }}
                   />
                 ) : (

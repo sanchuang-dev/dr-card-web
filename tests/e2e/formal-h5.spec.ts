@@ -89,6 +89,20 @@ test.describe('@formal-h5 active route smoke', () => {
   }
 })
 
+test('@formal-h5 chat long OSS URLs stay inside narrow WebView bubbles', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 })
+  await page.goto('/service/chat', { waitUntil: 'domcontentloaded' })
+  const longUrl = 'https://hexxueyantest.oss-cn-guangzhou.aliyuncs.com/storage/20261008/' + 'a'.repeat(90)
+  await page.getByRole('textbox', { name: '输入你的问题' }).fill(longUrl)
+  await page.getByRole('textbox', { name: '输入你的问题' }).press('Enter')
+  await expect(page.locator('[data-chat-role="user"]')).toContainText(longUrl)
+  await expectHealthyFormalRoute(page)
+  const overflowBubbles = await page.locator('[data-chat-bubble]').evaluateAll((nodes) =>
+    nodes.filter((node) => node.scrollWidth > node.clientWidth + 1).length,
+  )
+  expect(overflowBubbles).toBe(0)
+})
+
 test('@formal-h5 first-level tab uses CSS fade without root snapshot', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page)
 
@@ -153,12 +167,14 @@ test('@formal-h5 H021 title-bar actions remain available', async ({ page }) => {
 
   await page.goto('/service/chat', { waitUntil: 'domcontentloaded' })
   await expectHealthyFormalRoute(page)
-  // Compat: the TitleBar WeCom pill is hidden; the original QR sheet is opened by bottom 人工.
-  await expect(page.locator('[data-chat-wecom-entry]')).toHaveCount(0)
+  // The real human action stays in the chat; the QR is a distinct titlebar action.
   const humanEntry = page.locator('[data-chat-human-entry]')
   await expect(humanEntry).toBeVisible()
   await expect(humanEntry).toBeEnabled()
   await humanEntry.click()
+  await expect(page.locator('[data-human-stage]')).toHaveAttribute('data-human-stage', 'queuing')
+  await expect(page.locator('[data-chat-human-sheet]')).toHaveCount(0)
+  await page.getByRole('button', { name: '福利官二维码' }).click()
   await expect(page.locator('[data-chat-human-sheet]')).toBeVisible()
   await page.getByRole('button', { name: '取消' }).click()
   await expect(page.locator('[data-chat-human-sheet]')).toHaveCount(0)
@@ -329,14 +345,16 @@ test('@formal-h5 H022 shared claim-success implementation keeps route variants d
 test('@formal-h5 H022 prototype states stay on one route implementation', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page)
 
-  await page.goto('/card/share', { waitUntil: 'domcontentloaded' })
+  await page.goto('/card/share?coupon=91001', { waitUntil: 'domcontentloaded' })
   await expectHealthyFormalRoute(page)
-  await expect(page).toHaveURL(/\/card\/share$/)
+  expect(new URL(page.url()).pathname + new URL(page.url()).search).toBe('/card/share?coupon=91001')
+  await expect(page.getByRole('button', { name: '确认选择' })).toBeDisabled()
 
+  // Historic success URL must not imply a transfer without coupon ID or API.
   await page.goto('/card/share?state=success', { waitUntil: 'domcontentloaded' })
   await expectHealthyFormalRoute(page)
-  await expect(page).toHaveURL(/\/card\/share\?state=success$/)
-  await expect(page.getByText('分享成功', { exact: true })).toBeVisible()
+  await expect(page.getByText('未选择待转赠卡券，请从卡包点击「转赠」进入')).toBeVisible()
+  await expect(page.getByText('分享成功', { exact: true })).toHaveCount(0)
 
   await page.goto('/service/chat/human?state=queuing', { waitUntil: 'domcontentloaded' })
   await expectHealthyFormalRoute(page)
@@ -352,7 +370,7 @@ test('@formal-h5 H022 prototype states stay on one route implementation', async 
 test('@formal-h5 H023 shared SearchField stays consistent across formal H5 consumers', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page)
 
-  await page.goto('/card/share', { waitUntil: 'domcontentloaded' })
+  await page.goto('/card/share?coupon=91001', { waitUntil: 'domcontentloaded' })
   await expectHealthyFormalRoute(page)
   const cardShareField = page.locator('[data-search-field="subtle"][data-search-field-size="regular"] input')
   await expect(cardShareField).toHaveCount(1)

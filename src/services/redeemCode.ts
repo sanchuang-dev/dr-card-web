@@ -6,20 +6,18 @@ import { httpClient } from './http'
 export const REDEEM_CARD_CODE_PATH = '/api/cardredemptioncodes/redeem'
 
 const redemptionReceiptSchema = z.object({
-  user_card_id: z.number().int().positive(),
-  card_id: z.number().int().positive(),
-  card_name: z.string(),
-  card_sn: z.string().min(1),
+  coupons_id: z.number().int().positive(),
 }).passthrough()
 
 export type RedemptionReceipt = z.infer<typeof redemptionReceiptSchema>
 
-/** 用户只传原始 code，登录身份由统一 HTTP 层携带，成功后返回后台发券回执。 */
-export async function redeemCardCode(code: string): Promise<RedemptionReceipt> {
+/** 保留原始 code，并按所选片区提交 project_id；登录身份由 HTTP 层携带。 */
+export async function redeemCardCode(code: string, projectId: number): Promise<RedemptionReceipt> {
+  if (!Number.isInteger(projectId) || projectId <= 0) throw new Error('请选择适用片区')
   const payload = await httpClient.request<unknown>({
     method: 'POST',
     url: REDEEM_CARD_CODE_PATH,
-    data: { code },
+    data: { code, project_id: projectId },
   })
   return parseApiEnvelope(payload, redemptionReceiptSchema, {
     contract: 'cardredemptioncodes.redeem',

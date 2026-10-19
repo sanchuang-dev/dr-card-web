@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { AppError } from './appError'
 import { createHttpClient, DEFAULT_HTTP_TIMEOUT_MS } from './httpClient'
+import { cardApiSecstr } from './apiSignature'
 
 function axiosLikeError(config: unknown, overrides: Record<string, unknown> = {}) {
   const message = typeof overrides.message === 'string' ? overrides.message : 'Axios probe error'
@@ -18,6 +19,55 @@ function axiosLikeError(config: unknown, overrides: Record<string, unknown> = {}
 }
 
 describe('HTTP foundation', () => {
+  it('signs same-origin /api GET+POST at send time, including skipAuth OAuth, not foreign URLs', async () => {
+    const requests: Array<{ url: string; salt: string | undefined; auth: string | undefined }> = []
+    const client = createHttpClient({
+      baseURL: 'https://api.example.test',
+      signatureEnabled: true,
+      signatureCredentialsProvider: () => ({ token: 'native-token', salt: 'native-salt' }),
+      authHeadersProvider: () => ({ Authorization: 'Bearer access-token' }),
+      adapter: async config => {
+        requests.push({ url: config.url ?? '', salt: config.headers.get('salt') as string | undefined,
+          auth: config.headers.get('Authorization') as string | undefined })
+        return { data: { code: 0 }, status: 200, statusText: 'OK', headers: {}, config }
+      },
+    })
+    await client.request({ url: '/api/oauth/login', method: 'POST',
+      data: { token: 'native-token', salt: 'native-salt' }, skipAuth: true })
+    await client.request({ url: '/api/user/profile?page=2', method: 'GET' })
+    await client.request({ url: 'https://other.example.test/api/private' })
+    const login = new URL(requests[0].url)
+    expect(requests[0].auth).toBeUndefined()
+    expect(requests[0].salt).toBe('native-salt')
+    expect(login.searchParams.get('secstr')).toBe(cardApiSecstr({
+      ...Object.fromEntries(login.searchParams), salt: 'native-salt',
+    }, 'native-salt'))
+    const profile = new URL(requests[1].url)
+    expect(profile.searchParams.get('page')).toBe('2')
+    expect(profile.searchParams.get('token')).toBe('native-token')
+    expect(profile.searchParams.get('secstr')).toMatch(/^[0-9a-f]{32}$/)
+    expect(requests[1].auth).toBe('Bearer access-token')
+    expect(requests[2].url).toBe('https://other.example.test/api/private')
+    expect(requests[2].salt).toBeUndefined()
+    expect(requests[2].auth).toBeUndefined()
+  })
+
+  it('fails closed without credentials instead of sending unsigned API calls', async () => {
+    let sent = 0
+    const client = createHttpClient({
+      baseURL: 'https://api.example.test', signatureEnabled: true,
+      signatureCredentialsProvider: () => undefined,
+      adapter: async config => {
+        sent++
+        return { data: {}, status: 200, statusText: 'OK', headers: {}, config }
+      },
+    })
+    await expect(client.request({ url: '/api/user/detail' })).rejects.toMatchObject({
+      code: 'API_SIGNATURE_CREDENTIALS_MISSING', kind: 'configuration',
+    })
+    expect(sent).toBe(0)
+  })
+
   it('returns response data and applies the default timeout', async () => {
     const client = createHttpClient({
       baseURL: 'https://api.example.test',

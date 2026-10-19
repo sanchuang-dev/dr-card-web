@@ -7,7 +7,7 @@ import {
   useNavigationType,
   useViewTransitionState,
 } from 'react-router-dom'
-import { Settings } from 'lucide-react'
+import { Settings, UserRound } from 'lucide-react'
 import BottomNav from '../components/mobile/BottomNav'
 import TitleBar from '../components/mobile/TitleBar'
 import NotificationBell from '../components/mobile/NotificationBell'
@@ -206,6 +206,18 @@ export default function MobileLayout() {
         {allNotificationsRead ? '全部已读' : '一键已读'}
       </button>
     )
+    : location.pathname === '/service/chat'
+      ? (
+        <button
+          type="button"
+          aria-label="福利官二维码"
+          title="福利官二维码"
+          onClick={() => navigate({ pathname: location.pathname, search: location.search, hash: '#wecom' }, { replace: true, state: location.state })}
+          className="flex h-10 w-10 items-center justify-center rounded-full text-text-primary active:bg-[rgba(89,55,15,0.06)]"
+        >
+          <UserRound className="h-[21px] w-[21px]" aria-hidden />
+        </button>
+      )
     : route?.titleBarAction === 'settings'
       ? (
         <button type="button" aria-label="设置" onClick={() => navigateShell('/settings')} className="flex h-9 w-9 items-center justify-center rounded-full text-text-primary active:bg-[rgba(89,55,15,0.06)]">

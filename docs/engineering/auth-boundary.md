@@ -19,6 +19,16 @@
 
 旧 iOS `webkit.messageHandlers.getAuthorizationInfo.postMessage({}) → window.onToken(token)` 仅作为历史联调 / Bridge Lab Raw Probe 证据保留，不再是 production auth contract。
 
+## 2026-10-16｜/api 请求签名（来自后台源码静态核对）
+
+本地 API `docs/api-signature.md`、`src/middleware/auth.ts`、`src/app/api/config.ts` 已确认：所有 `/api/**` HTTP 请求经 `AppAuthMiddleware` 校验。H5 除已有 Bearer 会话外，还需携带 `token`、`timesp`（Asia/Shanghai 的 `yyyy-MM-dd HH:mm:ss`）及 `secstr`（`md5(salt + 排序拼接参数 + salt)`）；服务端对收到的 Query + Body 合并（Body 优先），排除 `secstr`/`callback` 后计算签名，时间窗口默认 ±5 分钟。
+
+实现统一在 `src/services/http/apiSignature.ts`；Axios 通过 `httpClient` 拦截器补签，`/api/oauth/login` 的 `skipAuth` **仅跳过 Bearer，不能跳过 secstr**；客服 SSE 和真人转接的独立 `fetch` 调同一签名函数，保留不可重放语义；Socket.IO 握手仍使用既有 `auth.token`，不属于 `/api/**` HTTP 中间件。
+
+**两种 Token 不可混淆**：Native `getLoginToken()` 返回的上游 `token/salt` 用于请求签名；OAuth 返回的 `accessToken` 负责 Bearer 业务会话。Native 凭据只在文档内存保存，不新增持久化字段、不注入第三方 origin。无有效签名凭据不能静默发送无签名业务请求。
+
+此结论基于本地后端源码和签名样例复算，以及 H5 CI；**不代表后端已部署该版本，亦不代表 Android/iOS WebView、CORS、上传 FormData 和真实用户会话已验收**。后端文档另已知「客户端自行提交 salt 即被采信」及「窗口内无 nonce 防重放」的安全限制，当前仅做协议对接；后端安全策略升级须独立评估。
+
 ## 当前仍待确认
 
 Native Bridge 解决的是“如何从 App 拿到登录 token”，以下问题仍不能自行推断：

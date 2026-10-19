@@ -1,11 +1,13 @@
 import { runtimePolicy } from '../../app/config/runtime'
 import { getLoginToken } from '../nativeBridge'
-import { createContractError, isAppError } from '../http/appError'
+import { createContractError, isAppError, type AppError } from '../http/appError'
 import { STORAGE_KEYS, storage } from '../../storage'
+import type { ApiSignatureCredentials } from '../http/apiSignature'
 import {
   createHttpClient,
   setHttpAuthFailureHandler,
   setHttpAuthHeadersProvider,
+  setHttpSignatureCredentialsProvider,
   setHttpUnauthorizedHandler,
 } from '../http/httpClient'
 
@@ -38,6 +40,8 @@ let initialBootstrap: Promise<AuthSession> | undefined
 let authFlowEnabled = false
 let initializedForDocument = false
 let volatileSession: AuthSession | undefined
+// Native upstream credentials never enter sessionStorage, URLs outside /api, or logs.
+let signatureCredentials: ApiSignatureCredentials | undefined
 
 function readSession(): AuthSession | undefined {
   const value = storage.read(STORAGE_KEYS.authSession)
@@ -55,6 +59,7 @@ function writeSession(session: AuthSession) {
 
 export function clearAuthSession() {
   volatileSession = undefined
+  signatureCredentials = undefined
   storage.remove(STORAGE_KEYS.authSession)
   if (typeof window !== 'undefined') window.dispatchEvent(new Event('dr-card-ui:auth-session-cleared'))
 }
@@ -104,9 +109,11 @@ async function loginFromNative(): Promise<AuthSession> {
     url: LOGIN_PATH,
     data: { salt: credentials.salt, token: credentials.token },
     skipAuth: true,
+    signatureCredentials: { token: credentials.token, salt: credentials.salt },
   })
 
   const session = parseLoginResponse(result)
+  signatureCredentials = { token: credentials.token, salt: credentials.salt }
   writeSession(session)
   return session
 }
@@ -114,7 +121,7 @@ async function loginFromNative(): Promise<AuthSession> {
 export function authenticate(force = false): Promise<AuthSession> {
   if (!force) {
     const current = readSession()
-    if (current) return Promise.resolve(current)
+    if (current && signatureCredentials) return Promise.resolve(current)
   }
   if (inFlightLogin) return inFlightLogin
 
@@ -178,6 +185,41 @@ async function reauthenticateAfterUnauthorized() {
 export async function refreshChatAuthAfterUnauthorized(): Promise<void> {
   if (authFlowEnabled) await reauthenticateAfterUnauthorized()
 }
+
+/** Obtain the upstream Native token/salt for independent SSE and HTTP transports.
+ * A restored accessToken requires re-reading the Native bridge before signing. */
+export async function getApiSignatureCredentials(): Promise<ApiSignatureCredentials> {
+  if (signatureCredentials) return signatureCredentials
+  if (!readSession()) {
+    throw createContractError('未建立签名会话', { code: 'AUTH_SIGNATURE_CREDENTIALS_MISSING' })
+  }
+  // Bridge failures happen before the HTTP request; preserve that distinction.
+  let native: Awaited<ReturnType<typeof getLoginToken>>
+  try {
+    native = await getLoginToken()
+  } catch {
+    throw createContractError('无法取得 Native 签名凭据，请检查 App 登录状态', {
+      code: 'AUTH_NATIVE_CREDENTIALS_UNAVAILABLE',
+    })
+  }
+  if (!native.token.trim() || !native.salt?.trim()) {
+    throw createContractError('Native 登录凭据缺少 token 或 salt', {
+      code: 'AUTH_NATIVE_CREDENTIALS_INVALID',
+    })
+  }
+  signatureCredentials = { token: native.token, salt: native.salt }
+  return signatureCredentials
+}
+
+/** Only these failures certify that signing stopped before HTTP transport. */
+export function isApiSignaturePreflightError(error: unknown): error is AppError {
+  return isAppError(error) &&
+    (error.code === 'AUTH_SIGNATURE_CREDENTIALS_MISSING' ||
+      error.code === 'AUTH_NATIVE_CREDENTIALS_INVALID' ||
+      error.code === 'AUTH_NATIVE_CREDENTIALS_UNAVAILABLE')
+}
+
+setHttpSignatureCredentialsProvider(getApiSignatureCredentials)
 
 setHttpAuthHeadersProvider(() => {
   // Route-level authFlowEnabled controls reauthentication/expiry UI, not credential attachment.

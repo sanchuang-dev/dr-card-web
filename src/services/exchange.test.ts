@@ -23,14 +23,14 @@ describe('coupon exchange backend contract', () => {
       data: { coupon_id: 3, points: 28 },
     })
 
-    await expect(redeemExchangeProduct(3)).resolves.toEqual({
+    await expect(redeemExchangeProduct(3, 12)).resolves.toEqual({
       couponId: 3,
       points: 28,
     })
     expect(mocks.request).toHaveBeenCalledWith({
       method: 'POST',
       url: EXCHANGE_REDEEM_PATH,
-      data: { id: 3 },
+      data: { id: 3, project_id: 12 },
     })
   })
 
@@ -46,7 +46,7 @@ describe('coupon exchange backend contract', () => {
       data: [],
     })
 
-    await expect(redeemExchangeProduct(3)).rejects.toThrow(message)
+    await expect(redeemExchangeProduct(3, 12)).rejects.toThrow(message)
   })
 
   it('rejects malformed successful data instead of showing a false success', async () => {
@@ -57,6 +57,6 @@ describe('coupon exchange backend contract', () => {
       data: { coupon_id: 3 },
     })
 
-    await expect(redeemExchangeProduct(3)).rejects.toThrow('coupons.exchange.data')
+    await expect(redeemExchangeProduct(3, 12)).rejects.toThrow('coupons.exchange.data')
   })
 })

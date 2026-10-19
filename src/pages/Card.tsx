@@ -153,14 +153,17 @@ function MovieTicket({ coupon, expired, used, onUse, onShare }: MovieTicketProps
         />
 
         {/* 主体：flex 左右两栏 */}
-        <div className="flex">
+        <div className="flex w-full min-w-0">
           {/* 左半：色块区 */}
           <div
             className="flex flex-col items-center justify-center px-4 py-4 text-center"
             style={{
               background: leftBg,
-              minWidth: 120,
-              flex: '0 0 auto',
+              // The left piece stays bounded so Chromium 88 has space to shrink the right pane.
+              width: '36%',
+              minWidth: 108,
+              maxWidth: 128,
+              flex: '0 0 36%',
             }}
             aria-hidden
           >
@@ -183,9 +186,20 @@ function MovieTicket({ coupon, expired, used, onUse, onShare }: MovieTicketProps
           />
 
           {/* 右半：内容区 */}
-          <div className="flex-1 px-4 py-3">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className={`min-w-0 truncate text-[15px] font-semibold ${isInactive ? 'text-coupon-used' : 'text-text-primary'}`}>
+          <div className="min-w-0 flex-1 px-3 py-3" style={{ minWidth: 0, flex: '1 1 0%' }}>
+            <div className="flex min-w-0 items-start justify-between gap-2">
+              <h3
+                className={`min-w-0 flex-1 text-[15px] font-semibold leading-5 ${isInactive ? 'text-coupon-used' : 'text-text-primary'}`}
+                style={{
+                  minWidth: 0,
+                  // -webkit-line-clamp is supported by legacy Chromium 88; avoid unsupported CSS line-clamp.
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  overflowWrap: 'anywhere',
+                }}
+              >
                 {coupon.name}
               </h3>
               <span
@@ -203,14 +217,14 @@ function MovieTicket({ coupon, expired, used, onUse, onShare }: MovieTicketProps
             </div>
 
             {coupon.validityLabel && (
-              <div className={`mt-1.5 flex items-center gap-1 text-[11px] ${isInactive ? 'text-text-inactive-muted' : 'text-text-tertiary'}`}>
-                <CalendarDays className="h-3 w-3" />
+              <div className={`mt-1.5 flex min-w-0 items-start gap-1 break-all text-[11px] ${isInactive ? 'text-text-inactive-muted' : 'text-text-tertiary'}`}>
+                <CalendarDays className="mt-0.5 h-3 w-3 flex-none" />
                 {coupon.validityLabel}
               </div>
             )}
 
             {coupon.limitNote && (
-              <div className={`mt-1 text-[11px] ${isInactive ? 'text-text-inactive-muted' : 'text-text-tertiary'}`}>
+              <div className={`mt-1 min-w-0 break-all text-[11px] ${isInactive ? 'text-text-inactive-muted' : 'text-text-tertiary'}`}>
                 {coupon.limitNote}
               </div>
             )}
@@ -219,13 +233,13 @@ function MovieTicket({ coupon, expired, used, onUse, onShare }: MovieTicketProps
              *  使用：橙色实心 pill；转赠：白底描边 pill。
              *  两个按钮 flex-1 平分宽度，视觉权重一致。
              *  已过期：两按钮都禁用；已使用：使用按钮隐藏（演示态）。 */}
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-3 flex min-w-0 items-center gap-2">
               {!used && !expired && (
                 <button
                   type="button"
                   onClick={onUse}
                   disabled={!canAction}
-                  className="h-8 flex-1 rounded-full bg-primary text-[12px] font-semibold text-text-inverse shadow-primary-button active:bg-primary-pressed disabled:opacity-50"
+                  className="h-8 min-w-0 flex-1 rounded-full bg-primary px-1 text-[12px] font-semibold text-text-inverse shadow-primary-button active:bg-primary-pressed disabled:opacity-50"
                 >
                   使用
                 </button>
@@ -234,7 +248,7 @@ function MovieTicket({ coupon, expired, used, onUse, onShare }: MovieTicketProps
                 type="button"
                 onClick={onShare}
                 disabled={!canAction}
-                className={`h-8 flex-1 rounded-full border text-[12px] font-semibold ${
+                className={`h-8 min-w-0 flex-1 rounded-full border px-1 text-[12px] font-semibold ${
                   canAction
                     ? 'border-border-strong bg-transparent text-text-secondary active:bg-surface-subtle'
                     : 'border-border bg-transparent text-text-inactive-muted'
@@ -257,7 +271,7 @@ function CouponTicketSkeleton() {
       <span className="sr-only">正在加载体验券</span>
       {[0, 1].map((index) => (
         <div key={index} aria-hidden="true" className="flex min-h-[166px] overflow-hidden rounded-[16px] bg-surface shadow-sm">
-          <div className="flex w-[120px] shrink-0 flex-col items-center justify-center gap-3 bg-reward-subtle px-4">
+          <div className="flex w-[36%] min-w-[108px] max-w-[128px] shrink-0 flex-col items-center justify-center gap-3 bg-reward-subtle px-4">
             <Skeleton className="h-9 w-14" />
             <Skeleton className="h-3 w-12" />
           </div>

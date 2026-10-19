@@ -26,11 +26,12 @@ export interface ExchangeRedeemResult {
  * both from the authenticated session and owns stock, deduction, ledger and issue
  * compensation semantics.
  */
-export async function redeemExchangeProduct(productId: number): Promise<ExchangeRedeemResult> {
+export async function redeemExchangeProduct(productId: number, projectId: number): Promise<ExchangeRedeemResult> {
+  if (!Number.isInteger(projectId) || projectId <= 0) throw new Error('请选择适用片区')
   const payload = await httpClient.request<unknown>({
     method: 'POST',
     url: EXCHANGE_REDEEM_PATH,
-    data: { id: productId },
+    data: { id: productId, project_id: projectId },
   })
 
   const data = parseApiEnvelope(payload, exchangeRedeemDataSchema, {

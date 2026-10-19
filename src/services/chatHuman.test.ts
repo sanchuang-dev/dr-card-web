@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { connectChatSocket, transferChatToHuman } from './chatHuman'
+import { AppError } from './http'
 
 const mocks = vi.hoisted(() => {
   const handlers = new Map<string, (...args: any[]) => void>()
@@ -13,7 +14,7 @@ const mocks = vi.hoisted(() => {
   }
   return {
     socket, handlers, io: vi.fn(() => socket), fetch: vi.fn(),
-    token: 'secret-token', refresh: vi.fn(),
+    token: 'secret-token', refresh: vi.fn(), signature: vi.fn(),
   }
 })
 vi.mock('socket.io-client', () => ({ io: mocks.io }))
@@ -23,6 +24,7 @@ vi.mock('../app/config/runtime', () => ({
 vi.mock('./auth/session', () => ({
   getAuthSession: () => ({ accessToken: mocks.token }),
   refreshChatAuthAfterUnauthorized: mocks.refresh,
+  getApiSignatureCredentials: mocks.signature,
 }))
 
 beforeEach(() => {
@@ -33,6 +35,7 @@ beforeEach(() => {
   mocks.socket.connected = false
   mocks.token = 'secret-token'
   mocks.fetch.mockReset(); mocks.refresh.mockReset()
+  mocks.signature.mockReset().mockResolvedValue({ token: 'native-token', salt: 'test-salt' })
   vi.stubGlobal('fetch', mocks.fetch)
 })
 
@@ -79,11 +82,29 @@ describe('#138 Socket.IO client contract', () => {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     await expect(transferChatToHuman()).resolves.toBeUndefined()
     const [url, request] = mocks.fetch.mock.calls[0]
-    expect(url).toBe('https://api.example.test/api/chatmessages/transfer')
+    const signedUrl = new URL(url)
+    expect(signedUrl.origin + signedUrl.pathname).toBe('https://api.example.test/api/chatmessages/transfer')
+    expect(signedUrl.searchParams.get('token')).toBe('native-token')
+    expect(signedUrl.searchParams.get('secstr')).toMatch(/^[0-9a-f]{32}$/)
+    expect(request.headers.salt).toBe('test-salt')
     expect(request.headers.Authorization).toBe('Bearer secret-token')
     expect(request.method).toBe('POST')
     expect(JSON.parse(request.body)).toEqual({})
     expect(mocks.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    'AUTH_SIGNATURE_CREDENTIALS_MISSING',
+    'AUTH_NATIVE_CREDENTIALS_INVALID',
+    'AUTH_NATIVE_CREDENTIALS_UNAVAILABLE',
+  ])('preserves %s before sending any transfer request', async code => {
+    const error = new AppError({
+      kind: 'contract', code, message: 'Native 登录凭据缺少 token 或 salt',
+    })
+    mocks.signature.mockRejectedValueOnce(error)
+    await expect(transferChatToHuman()).rejects.toBe(error)
+    expect(mocks.fetch).not.toHaveBeenCalled()
+    expect(mocks.refresh).not.toHaveBeenCalled()
   })
 
   it('does not fake transfer success on business error, network failure or invalid mode', async () => {
