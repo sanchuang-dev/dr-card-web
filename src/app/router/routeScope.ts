@@ -72,11 +72,10 @@ const NATIVE_REFERENCE_ROUTE_PATHS = new Set<string>([
 
 /**
  * Formal H5 routes that remain part of the product route graph but are intentionally outside
- * the current engineering round. The user explicitly deferred mall work; this metadata keeps
- * that decision separate from route ownership, so existing product navigation is unchanged.
+ * the current engineering round. `/mall` is now an active iframe + SSO container; the goods
+ * detail and cart boundary pages stay deferred until the mall H5 takes them over.
  */
 const DEFERRED_FORMAL_H5_ROUTE_PATHS = new Set<string>([
-  '/mall',
   '/mall/goods/:id',
   '/mall/cart',
 ])
