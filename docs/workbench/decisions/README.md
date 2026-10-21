@@ -92,7 +92,7 @@
 
 | D-083 | **2026-10-12 用户确认后台兑换码合同**：兑换码至少 10 位，不自动去空格/大写、不限定字符类型或 H5 最大长度；输入不足 10 位禁用提交；真实 API `/api/cardredemptioncodes/redeem`；成功返回卡包券凭证；本地卡包 source=60，第三方 MyCoupons 独立读取。覆盖历史 D-004/D-008/D-017 中与兑换码格式及提交门槛相冲突的规则，原型历史保留不篡改 | Implementation in PR #195 / API validation pending | [card-code-redeem-contract.md](../../engineering/card-code-redeem-contract.md) | T009 #68 #69 |
 | D-082 | **2026-09-29 Maintainer 定案商城主入口**：`/mall` 使用 `MallWebView` 在现有 H5 壳层内 iframe 承载商城，覆盖 D-031 对 `/mall` 主入口的占位口径，商品详情/购物车边界继续保留；当时的 `http://www.3-wins.cn/` 为历史联调地址，入口 URL 由 D-084 管理。真实 App WebView 的 iframe policy 与鉴权仍需联调证据 | Implemented / URL superseded by D-084 | [T008-mall-exchange.md](T008-mall-exchange.md)、[MallWebView.tsx](../../../src/pages/MallWebView.tsx) | T008 #17 |
-| D-084 | **2026-10-21 商城 iframe 入口调整**：`kbs_shop` 使用 `https://kbs-shop.3cgroup.cn/`，`kbs_shop2` 仍使用 `https://kbs-shop2.3cgroup.cn/h5`。依据已有探测记录，`kbs_shop` 的 `/h5` 返回 404、根路径返回 200；可达性不代表页面内容或 SSO 已验收，仍需商城方和 App WebView 联调确认 | Implemented / validation pending | [T008-mall-exchange.md](T008-mall-exchange.md)、[MALL_SHOPS](../../../src/services/sso/mallSso.ts) | T008 #17 |
+| D-084 | **2026-10-21 商城 iframe 入口调整**：`kbs_shop` 使用 `https://kbs-shop.3cgroup.cn/`，`kbs_shop2` 仍使用 `https://kbs-shop2.3cgroup.cn/h5`。依据已有探测记录，`kbs_shop` 的 `/h5` 返回 404、根路径返回 200；可达性不代表页面内容或 SSO 已验收，仍需商城方和 App WebView 联调确认 | Implemented / validation pending；入口调整见 PR #254 | [T008-mall-exchange.md](T008-mall-exchange.md)、[MALL_SHOPS](../../../src/services/sso/mallSso.ts) | T008 #17 |
 
 ## 2. 待确认/阻塞项（施工前必须决策）
 

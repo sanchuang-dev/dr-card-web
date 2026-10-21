@@ -2,7 +2,7 @@
 
 ## 结论
 
-本卡盘点范围限定为 **active formal H5**。Native reference / legacy 与 deferred mall 不参与施工。
+本卡盘点范围限定为 **active formal H5**。Native reference / legacy 与当时 deferred 的商城路由不参与施工。后续 `/mall` 主入口已通过 D-082/D-084 转为 active；商城详情与购物车仍 deferred。本卡记录保留盘点时范围。
 
 当前正式 H5 已有大量“状态驱动单实现”的正确做法，本卡不为了减少文件数量强行合并具有不同产品语义的步骤页；只对确有“多 URL / 同实现”关系的入口做显式工程收口，并加回归门禁。
 

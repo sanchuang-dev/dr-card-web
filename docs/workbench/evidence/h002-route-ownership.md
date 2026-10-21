@@ -68,3 +68,7 @@ scope registry 会在运行时代码初始化时校验显式归类的 canonical 
 ## 当前结论
 
 H002 在 review 修正完成后继续保持 `Agent Review`。是否标记为 `Accepted` 仍由用户确认。
+
+## 后续范围更新（2026-10-21）
+
+H002 实施时 `/mall`、`/mall/goods/:id`、`/mall/cart` 均为 deferred。后续 `/mall` 主入口由 D-082/D-084 启用为 iframe + SSO 容器，并在 `routeScope.ts` 中转为 active formal-H5；商品详情与购物车继续 deferred。以上记录保留 H002 当时的历史状态，不代表当前路由 scope。

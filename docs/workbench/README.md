@@ -79,5 +79,5 @@ workbench/
 
 - `tasks/` 只承载当前 App 内嵌 H5 工程任务；
 - `legacy` / Native reference 页面默认不进入正式 H5 施工、重构与业务验收；
-- 商城当前暂不纳入本轮 H5 编码任务；
+- `/mall` 当前作为 iframe + SSO 容器纳入 active formal-H5 工程范围；商城页面内容、SSO 与 App WebView 仍待联调验收。`/mall/goods/:id`、`/mall/cart` 子路由仍 deferred；
 - 新任务不得依赖历史 UI 卡的编号状态作为当前产品事实源。
