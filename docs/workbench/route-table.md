@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | D1 | 主 Tab 数量与主导航形态 | 当前实现以注册表为准：保留五项底部 Tab：首页 / 泡泡 / 扫码 / 服务 / 我的。旧的“首页 / 卡包 / 兑换 / 我的”四项快照已被替代；`/card` 与 `/exchange` 保留为二级可达路径。 |
 | D2 | 诗得丽专栏入口形态 | **已被 D-072 覆盖**：根路由 `/` 已按需求 §2.1 改为「诗得丽品牌专栏」首页（金刚区删除、打卡内容迁入）；独立路由 `/dearseed` 及其弹层、领取态保留不动。此前 D-054 的「`/` 仅承载卡博士 APP 首页、首页卡片进入 `/dearseed`」为旧口径。 |
-| D3 | H5/APP 边界 | #17 `/mall` 已由 D-082 覆盖为 `MallWebView` iframe `http://www.3-wins.cn/`；#48/#49 商品详情/购物车继续由 `WebViewBoundary.tsx` 承载边界占位。 |
+| D3 | H5/APP 边界 | #17 `/mall` 由 D-082 使用 `MallWebView` iframe 承载商城；入口配置见 D-084 / `MALL_SHOPS`（`kbs_shop` 根路径、`kbs_shop2` `/h5`），页面内容与 SSO 仍待联调验收；#48/#49 商品详情/购物车继续由 `WebViewBoundary.tsx` 承载边界占位。 |
 
 ## 2. 一级 Tab（5 项）
 
@@ -19,7 +19,7 @@
 | `/` | 首页 | Home | — | T005、T021 | 极地种子品牌专栏首页（T021 按需求 §2.1 改造）：搜索栏 + 头像 + Banner + 迁入的打卡内容 + 公益板块 + 品牌故事；两个板块分别进入 `/cause` 与 `/brand-culture` 富文本占位页；`/dearseed?overlay=reminder` 等专栏原路由保留不动 |
 | `/points` | 泡泡 | CircleDot | #5 | T006、T022 | 泡泡值资产卡 + 泡泡福利入口 + 泡泡任务占位卡；流水明细已按 T022 迁至 `/points/detail`；用户于 2026-08-24 明确纠正原 `/checkin` 映射 |
 | `/card/verify` | 扫码 | QrCode（中间凸起） | #67 | T009 | 扫码核销，点击扫描框进入确认核销 |
-| `/mall` | 服务 | Headset | #17 | T008、T023 | 卡博士 H5 商城：D-082 以 `MallWebView` iframe 承载 `http://www.3-wins.cn/`；T023 按需求 §6 接管一级 Tab「服务」。真实 App WebView 兼容性仍待联调 |
+| `/mall` | 服务 | Headset | #17 | T008、T023 | 卡博士 H5 商城：D-082 以 `MallWebView` iframe 承载商城，目标地址按 D-084 / `MALL_SHOPS` 配置；页面内容、SSO 与真实 App WebView 兼容性仍待联调。T023 按需求 §6 接管一级 Tab「服务」 |
 | `/profile` | 我的 | UserRound | #19、#20 | T011 | `?overlay=app-prompt` |
 
 ## 3. 二级页路由
@@ -61,7 +61,7 @@
 | --- | --- | --- | --- | --- |
 | `/exchange` | #18、#37、#38、#39 | 底部 Tab「兑换」 | 底部 Tab | `?state=sort-exchange/sort-points`（默认＝综合）；`?overlay=redeem&product=` |
 | `/exchange/result` | #40 | 兑换确认成功 | 洗护兑换专区 | `?product=` |
-| `/mall` | #17 | 一级 Tab「服务」；首页头像；诗得丽专栏-「会员空间」/ 会员卡片；我的-「专属权益」；体验券使用弹窗-商品信息区；`/membership` 重定向落点（T023 需求 §6） | 诗得丽专栏首页 | D-082：真实商城 iframe，当前 URL `http://www.3-wins.cn/` |
+| `/mall` | #17 | 一级 Tab「服务」；首页头像；诗得丽专栏-「会员空间」/ 会员卡片；我的-「专属权益」；体验券使用弹窗-商品信息区；`/membership` 重定向落点（T023 需求 §6） | 诗得丽专栏首页 | D-082 / D-084：商城 iframe，目标地址由 `MALL_SHOPS` 配置；当前 `kbs_shop` 根路径、`kbs_shop2` `/h5`，页面内容与 SSO 待验收 |
 | `/mall/goods/:id` | #48 | H5 商城-商品 | H5 商城 | WebView 边界页 |
 | `/mall/cart` | #49 | H5 商城-购物车 | H5 商城 | WebView 边界页 |
 
