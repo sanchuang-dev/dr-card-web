@@ -63,7 +63,7 @@ OpenCode 必须先遵守根目录 `AGENTS.md`，并重点检查：
 - 单纯代码风格意见；
 - 无收益的大规模重构；
 - legacy / Native reference 内部卫生（除非本 PR 修改它或污染 formal H5）；
-- 商城（当前 deferred，除非 PR 明确施工）；
+- 商城运行行为（仅当 PR 明确施工时 review；`/mall` 已是 active formal-H5 路由，但非商城行为改动不因此扩大审查范围）；
 - 为覆盖率数字补测试；
 - 重新验收历史 UI；
 - 自行发明 backend / auth / JSBridge 协议。

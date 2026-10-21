@@ -60,15 +60,14 @@ engineeringScope = deferred
 
 ## 4. 当前 deferred formal-H5 范围
 
-用户已明确本轮暂不处理商城，因此：
+`/mall` 主入口已由 D-082/D-084 正式启用为 iframe + SSO 容器，并纳入 active formal-H5 smoke；这不代表商城页面内容、SSO 或 App WebView 已验收。当前仍 deferred 的只有：
 
-- `/mall`
 - `/mall/goods/:id`
 - `/mall/cart`
 
-标记为 `formal-h5 + deferred`。
+以上子路由标记为 `formal-h5 + deferred`。
 
-现有主导航仍可保留商城入口；`deferred` 只约束当前工程施工、调试和后续自动化枚举，不改产品信息架构。
+`deferred` 只约束当前工程施工、调试和后续自动化枚举，不改产品信息架构。
 
 ## 5. 可复用 API
 

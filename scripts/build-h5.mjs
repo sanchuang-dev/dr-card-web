@@ -99,6 +99,14 @@ if (!BRIDGE_MODES.has(bridgeMode)) {
   errors.push(`Unknown VITE_BRIDGE_MODE=${bridgeMode}. Expected disabled, mock, or native.`)
 }
 
+const MALL_TARGETS = new Set(['kbs_shop', 'kbs_shop2'])
+const mallTarget = readEnv('VITE_MALL_TARGET')?.trim() || 'kbs_shop'
+if (!MALL_TARGETS.has(mallTarget)) {
+  errors.push(
+    `Unknown VITE_MALL_TARGET=${mallTarget}. Expected kbs_shop or kbs_shop2.`,
+  )
+}
+
 const prodLike = target.appEnvironment === 'test' || target.appEnvironment === 'prod'
 if (prodLike && dataMode === 'mock') {
   errors.push(`${target.appEnvironment} builds forbid VITE_DATA_MODE=mock; Mock fallback is not allowed.`)
@@ -182,6 +190,7 @@ const runtimeEnv = {
   VITE_API_BASE_URL: apiBaseUrl,
   VITE_BUDDY_PUBLIC_ORIGIN: publicOrigin,
   VITE_BRIDGE_MODE: bridgeMode,
+  VITE_MALL_TARGET: mallTarget,
   VITE_BUILD_SHA: buildSha,
   VITE_BUILD_ID: buildId,
   VITE_SOURCE_BRANCH: sourceBranch,
@@ -194,6 +203,7 @@ const metadata = {
   appEnvironment: target.appEnvironment,
   dataMode,
   bridgeMode,
+  mallTarget,
   apiBaseConfigured: Boolean(apiBaseUrl),
   buddyPublicOriginConfigured: Boolean(publicOrigin),
   ...(ossWebPath ? { ossWeb: { target: ossWebTarget, path: `${ossWebPath}/` } } : {}),
