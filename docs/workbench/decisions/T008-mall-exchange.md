@@ -7,6 +7,7 @@
 > 决策人：智能体按 `AGENTS.md` §11 证据阶梯裁定；B-007 / B-008 由用户当轮指令定案关闭，未新增产品规则
 > 状态：Accepted（B-007 / B-008 已关闭；新增 B-024 / B-025 / B-026 未决，见 §8）
 > 2026-09-29 更新：Maintainer 明确定案 `/mall` 主入口改为在现有 H5 壳层内 iframe 承载 `http://www.3-wins.cn/`，由 D-082 覆盖 D-031 对 `/mall` 主入口的旧边界占位口径；商品详情/购物车边界未随本次改动扩展。
+> 2026-10-21 更新：PR #253 将 `kbs_shop` 的 iframe 入口从 `/h5` 改为站点根路径 `/`。依据现有联调记录 `/h5` 返回 404、根路径返回 200；这仅说明入口探测结果，不代表商城页面内容或 SSO 已完成验收。`kbs_shop2` 仍使用 `/h5`。具体记录见 D-084。
 
 ## 1. 决策目的
 
@@ -28,16 +29,18 @@ T008 原状态是 `Draft / Blocked`，两个阻塞项挡在施工前：
 | D-035 | **#39 兑换确认为弹层而非页面**：`?overlay=redeem&product=<id>`，弹窗内呈现商品/数量/说明/消耗泡泡值/当前余额；余额不足与售罄时主按钮 `disabled` 且按钮文案换为「泡泡值不足」/「已售罄」，同时在列表卡上以 Tag / 蒙层同步标记 | T008 卡实施要求「兑换确认显示商品、消耗、余额和不足/不可兑换状态」；不可兑换必须在列表与弹窗双处可见，才不是静态文案 | #39 #18 |
 | D-036 | **#40 存入卡包沿用兑换专区作为背景层** + `PromptOverlay` 成功提示，双 CTA：「查看我的卡包」→ `/card`、「关闭」→ `/exchange`；提交中态为固定 700ms，不引入随机 | 原型 §4 成功态是覆盖在专区之上的提示层；固定时长保证截图可复现（与 T009 提交中态同款处理） | #40 |
 | D-037 | 兑换未决业务规则集中在夹具 `EXCHANGE_RULE_STATUS`（`confirmed` / `blocker` / `note`），页面与组件不得硬编码，也不得把夹具当成已确认规则 | T009 D-017 已确立该模式；本轮三条规则（排序方向 / SKU 清单 / 结算写入）均未确认 | #18 #37 #38 #39 #40 |
-| D-082 | **/mall 主入口改为真实商城 iframe 承载**：`router/index.tsx` 对 `/mall` 使用 `MallWebView`，在现有手机壳层与底部导航内嵌 `http://www.3-wins.cn/`。HTTP scheme 为 2026-09-29 Maintainer 明确指定的当前联调口径，不自动升级或替换；真实 App WebView 的 cleartext/mixed-content、鉴权及目标站 iframe 策略仍需真机验证。D-031 对 `/mall` 主入口的占位口径由本决策覆盖，`/mall/goods/:id`、`/mall/cart` 仍沿用既有边界页，除非另有定案。 | Maintainer 2026-09-29 当轮明确要求；当前实现 `MallWebView.tsx` | #17 |
+| D-082 | **/mall 主入口改为商城 iframe 承载**：`router/index.tsx` 对 `/mall` 使用 `MallWebView`，在现有手机壳层与底部导航内嵌商城。2026-09-29 Maintainer 当时指定的 `http://www.3-wins.cn/` 是历史联调地址，2026-10-21 起入口配置由 D-084 管理。D-031 对 `/mall` 主入口的占位口径由本决策覆盖，`/mall/goods/:id`、`/mall/cart` 仍沿用既有边界页，除非另有定案。 | Maintainer 2026-09-29 当轮明确要求；当前实现 `MallWebView.tsx` | #17 |
+| D-084 | **`kbs_shop` 当前 iframe 入口使用站点根路径** `https://kbs-shop.3cgroup.cn/`；`kbs_shop2` 仍使用 `https://kbs-shop2.3cgroup.cn/h5`。本次调整依据已有探测记录：`kbs-shop` 的 `/h5` 返回 404、根路径返回 200。此证据只确认 HTTP 可达性，不确认根路径实际呈现商城或 SSO 成功；需商城部署方确认页面内容，并完成浏览器及 App WebView 联调。 | PR #253 的入口调整及 2026-10-20 联调探测记录；运行时配置 `MALL_SHOPS` | #17 |
 
 ## 3. 决策细节
 
 ### 3.1 商城承载（D-031 → D-082）
 
 - D-031 是 2026-08-22 的历史事实：三条商城路由最初统一由 `WebViewBoundary` 承载占位。
-- 2026-09-29 D-082 覆盖其中 **`/mall` 主入口**：`router/index.tsx` 直接渲染 `MallWebView`，iframe 地址固定为 Maintainer 指定的 `http://www.3-wins.cn/`，手机壳层与底部导航继续保留。
+- 2026-09-29 D-082 覆盖其中 **`/mall` 主入口**：`router/index.tsx` 直接渲染 `MallWebView`，在手机壳层与底部导航内承载商城；当时使用的 `http://www.3-wins.cn/` 已是历史联调地址，不再作为当前入口。
+- 2026-10-21 D-084 更新 `MallWebView` 的目标配置：`kbs_shop` 使用 `https://kbs-shop.3cgroup.cn/`，`kbs_shop2` 使用 `https://kbs-shop2.3cgroup.cn/h5`。这是基于可达性探测的运行时入口调整，不把 HTTP 200 等同于页面内容正确或 SSO 可用；商城页面内容和真实 WebView/SSO 仍待验收。
 - `/mall/goods/:id`、`/mall/cart` 当前仍按 `routes.ts` 的 `boundary: 'webview'` 落到 `WebViewBoundary`，本次没有擅自把两个子路由改成真实商城 URL。
-- HTTP scheme 是当前联调输入，不在本仓库自动重写；cleartext / mixed-content、X-Frame-Options / CSP frame-ancestors、鉴权透传均属于 App WebView 联调证据，不因浏览器 preview 构建成功而宣称已通过。
+- 当前商城入口统一由 `MALL_SHOPS` 配置。cleartext / mixed-content、X-Frame-Options / CSP frame-ancestors、鉴权透传均属于 App WebView 联调证据，不因浏览器 preview 构建成功而宣称已通过。
 - D-021 的业务 `DebugPanel` 规则不变：仍仅由 `?debug=1` 显式开启。
 
 ### 3.2 兑换专区视觉与排序（D-032、D-033）
@@ -83,7 +86,7 @@ T008 原状态是 `Draft / Blocked`，两个阻塞项挡在施工前：
 | #39 兑换确认（余额不足） | `/exchange?overlay=redeem&product=e5` |
 | #39 兑换确认（售罄） | `/exchange?overlay=redeem&product=e4` |
 | #40 存入卡包成功 | `/exchange/result?product=e1` |
-| #17 卡博士商城（真实商城 iframe，D-082） | `/mall` |
+| #17 卡博士商城（商城 iframe，D-082 / D-084；目标 URL 见 `MALL_SHOPS`） | `/mall` |
 | #48 商品详情（WebView 边界） | `/mall/goods/1001` |
 | #49 购物车（WebView 边界） | `/mall/cart` |
 
@@ -111,7 +114,7 @@ T008 原状态是 `Draft / Blocked`，两个阻塞项挡在施工前：
 
 | 编号 | 定案内容 |
 | --- | --- |
-| `B-007` | **历史定案（2026-08-22）**：三条商城路由最初统一使用 WebView 边界页（D-031）。**2026-09-29 Maintainer 新定案 D-082 已覆盖 `/mall` 主入口**，改为 iframe 承载 `http://www.3-wins.cn/`；商品详情/购物车仍保留原边界。 |
+| `B-007` | **历史定案（2026-08-22）**：三条商城路由最初统一使用 WebView 边界页（D-031）。**2026-09-29 Maintainer 新定案 D-082 已覆盖 `/mall` 主入口**，改为 iframe 承载商城；2026-10-21 D-084 将 `kbs_shop` 入口调整为 `https://kbs-shop.3cgroup.cn/`（探测到 `/h5` 为 404、根路径为 200，页面内容与 SSO 仍待验收），`kbs_shop2` 仍为 `/h5`；商品详情/购物车仍保留原边界。 |
 | `B-008` | **用户定案（2026-08-22）**：洗护兑换专区在本仓库本地实现（搜索、综合/兑换量/泡泡值排序、商品卡、兑换确认、余额不足、售罄、成功存入卡包）；禁止照搬历史 T11 稿的深绿金 KV 和私有配色，视觉只消费已注册语义 Token。对应 D-032、D-033。 |
 
 ## 8. 未决与风险
@@ -127,5 +130,5 @@ T008 原状态是 `Draft / Blocked`，两个阻塞项挡在施工前：
 其他风险：
 
 - 商品缩略图目前复用 `dearseed-kit` 物料，真实商品图未提供；一旦拿到正式素材需重新评估卡面比例。
-- `/mall` 当前真实联调地址已由 Maintainer 指定为 `http://www.3-wins.cn/`；scheme 不自动替换。真实 App WebView 的 cleartext/mixed-content、目标站 iframe 策略与鉴权透传仍需联调验证。商品详情/购物车仍是边界占位。
+- `/mall` 当前按 `VITE_MALL_TARGET` 选择 `MALL_SHOPS` 中的商城地址：`kbs_shop` 为 `https://kbs-shop.3cgroup.cn/`，`kbs_shop2` 为 `https://kbs-shop2.3cgroup.cn/h5`。D-084 的根路径变更基于可达性探测，商城页面内容是否正确、SSO、目标站 iframe 策略及 App WebView 仍需联调验证。商品详情/购物车仍是边界占位。
 - #40 成功态未与 T009 卡包夹具联动（受 B-026 约束），若后续产品要求兑换即写入卡包，需要新决策而非按缺陷修复。

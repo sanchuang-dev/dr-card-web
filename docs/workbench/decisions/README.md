@@ -91,7 +91,8 @@
 | D-081 | 首页「公益板块」和「极地种子品牌故事」均为可点击入口，分别进入 `/cause` 与 `/brand-culture`；两个详情页使用共享空富文本承载组件，当前不请求接口、不填充假内容，未来由统一数据层提供富文本。两个路由沿用 App 壳层标题栏，返回各自来源页；`/cause` 为新增空节点，`/brand-culture` 保留原路径和来源入口 | Implemented | [Home.tsx](../../../src/pages/Home.tsx)、[RichTextPlaceholder.tsx](../../../src/pages/RichTextPlaceholder.tsx)、[routes.ts](../../../src/app/router/routes.ts) | T021 |
 
 | D-083 | **2026-10-12 用户确认后台兑换码合同**：兑换码至少 10 位，不自动去空格/大写、不限定字符类型或 H5 最大长度；输入不足 10 位禁用提交；真实 API `/api/cardredemptioncodes/redeem`；成功返回卡包券凭证；本地卡包 source=60，第三方 MyCoupons 独立读取。覆盖历史 D-004/D-008/D-017 中与兑换码格式及提交门槛相冲突的规则，原型历史保留不篡改 | Implementation in PR #195 / API validation pending | [card-code-redeem-contract.md](../../engineering/card-code-redeem-contract.md) | T009 #68 #69 |
-| D-082 | **2026-09-29 Maintainer 定案商城主入口**：`/mall` 使用 `MallWebView` 在现有 H5 壳层内 iframe 承载 `http://www.3-wins.cn/`；HTTP scheme 为当前明确输入，不自动替换。该决策覆盖 D-031 对 `/mall` 主入口的占位口径；商品详情/购物车边界继续保留。真实 App WebView 的 cleartext/mixed-content、iframe policy 与鉴权仍需联调证据 | Implemented / validation pending | [T008-mall-exchange.md](T008-mall-exchange.md)、[MallWebView.tsx](../../../src/pages/MallWebView.tsx) | T008 #17 |
+| D-082 | **2026-09-29 Maintainer 定案商城主入口**：`/mall` 使用 `MallWebView` 在现有 H5 壳层内 iframe 承载商城，覆盖 D-031 对 `/mall` 主入口的占位口径，商品详情/购物车边界继续保留；当时的 `http://www.3-wins.cn/` 为历史联调地址，入口 URL 由 D-084 管理。真实 App WebView 的 iframe policy 与鉴权仍需联调证据 | Implemented / URL superseded by D-084 | [T008-mall-exchange.md](T008-mall-exchange.md)、[MallWebView.tsx](../../../src/pages/MallWebView.tsx) | T008 #17 |
+| D-084 | **2026-10-21 商城 iframe 入口调整**：`kbs_shop` 使用 `https://kbs-shop.3cgroup.cn/`，`kbs_shop2` 仍使用 `https://kbs-shop2.3cgroup.cn/h5`。依据已有探测记录，`kbs_shop` 的 `/h5` 返回 404、根路径返回 200；可达性不代表页面内容或 SSO 已验收，仍需商城方和 App WebView 联调确认 | Implemented / validation pending | [T008-mall-exchange.md](T008-mall-exchange.md)、[MALL_SHOPS](../../../src/services/sso/mallSso.ts) | T008 #17 |
 
 ## 2. 待确认/阻塞项（施工前必须决策）
 
@@ -126,7 +127,7 @@
 | --- | --- | --- | --- |
 | B-001 | 品牌文化视觉方向（深绿深色长页 + 浮动 CTA 是否保留） | **用户定案（2026-08-24）**：#16 只铺摹客原型长图、不加浮动 CTA，T13 深绿深色稿与右下浮动按钮均不继承；实现按 `D1gOOzGEq` 真值（全页 0 button、单张长图铺满 artboard），返回栏沿用 MobileLayout 统一提供（D-051） | [T005-entry-home-onboarding.md](T005-entry-home-onboarding.md) |
 | B-009 | 兑换码长度/字符集/错误态/成功态（原型 8 位、11 位 vs 历史 12 位） | **历史** D-008/D-017 曾按 reference 取 12；**2026-10-12 D-083 新合同覆盖**：至少 10 位，原样提交，不限制字符集/前端最大长度；此处仅保留决策演变 | [T009-wallet-redemption.md](T009-wallet-redemption.md) |
-| B-007 | H5 商城承载方式（本地高保真 / WebView / 外链占位） | 2026-08-22 的三路由边界定案 D-031 仍保留历史；**2026-09-29 Maintainer 以 D-082 覆盖 `/mall` 主入口**，改用 `MallWebView` iframe `http://www.3-wins.cn/`，商品详情/购物车仍保留边界 | [T008-mall-exchange.md](T008-mall-exchange.md) §3.1 / §7 |
+| B-007 | H5 商城承载方式（本地高保真 / WebView / 外链占位） | 2026-08-22 的三路由边界定案 D-031 仍保留历史；**2026-09-29 Maintainer 以 D-082 覆盖 `/mall` 主入口**，改为 iframe 承载商城；2026-10-21 D-084 将 `kbs_shop` 入口调整为根路径，页面内容与 SSO 仍待验收；商品详情/购物车仍保留边界 | [T008-mall-exchange.md](T008-mall-exchange.md) §3.1 / §7 |
 | B-008 | 洗护兑换专区主视觉与搜索/排序；T11 深绿 KV 不自动生效 | **用户定案（2026-08-22）**：兑换专区在本仓库本地实现（搜索/三维度排序/商品卡/兑换确认/余额不足/售罄/成功存入卡包）；禁止照搬历史 T11 深绿金 KV 与私有配色，只消费已注册语义 Token（D-032、D-033） | [T008-mall-exchange.md](T008-mall-exchange.md) §7 |
 | B-010 | 通知 Tab 结构：原型「全部/未读」两类 vs 历史 4 Tab | D-010：按 reference 通知标准页采用 4 Tab | [T012-notifications.md](T012-notifications.md) |
 | B-011 | 消息详情：是否自动已读、CTA 类型、分类 Tab | D-011：按 `:id` 渲染真实单条正文、进入即已读、CTA 仅活动类 | [T012-notifications.md](T012-notifications.md) |
