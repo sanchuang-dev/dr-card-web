@@ -26,7 +26,7 @@ export interface MallShop {
 export const MALL_SHOPS: Record<MallTarget, MallShop> = {
   kbs_shop: {
     origin: 'https://kbs-shop.3cgroup.cn',
-    url: 'https://kbs-shop.3cgroup.cn/h5',
+    url: 'https://kbs-shop.3cgroup.cn/',
   },
   kbs_shop2: {
     origin: 'https://kbs-shop2.3cgroup.cn',

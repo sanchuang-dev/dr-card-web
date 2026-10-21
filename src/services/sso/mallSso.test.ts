@@ -68,10 +68,10 @@ const ticketEnvelope = {
 }
 
 describe('mall SSO 配置', () => {
-  it('binds each target to the exact shop origin and /h5 entry', () => {
+  it('binds each target to the exact shop origin and configured entry', () => {
     expect(MALL_SHOPS.kbs_shop).toEqual({
       origin: 'https://kbs-shop.3cgroup.cn',
-      url: 'https://kbs-shop.3cgroup.cn/h5',
+      url: 'https://kbs-shop.3cgroup.cn/',
     })
     expect(MALL_SHOPS.kbs_shop2).toEqual({
       origin: 'https://kbs-shop2.3cgroup.cn',
