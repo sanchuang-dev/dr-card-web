@@ -25,15 +25,15 @@ function getApiProxyTarget(raw: string | undefined): string {
 // Cloudflare and local dev keep '/'.
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const devApiTarget = getApiProxyTarget(process.env.VITE_API_BASE_URL ?? env.VITE_API_BASE_URL)
-  const ossArtifact = (process.env.H5_OSS_ARTIFACT ?? env.H5_OSS_ARTIFACT) === '1'
+  const devApiTarget = getApiProxyTarget(process.env.VITE_API_BASE_URL?.trim() || env.VITE_API_BASE_URL)
+  const ossArtifact = (process.env.H5_OSS_ARTIFACT || env.H5_OSS_ARTIFACT) === '1'
   const fixedWebBases: Record<string, string> = {
     ui: '/kbs-web/ui/',
     dev: '/kbs-web/dev/',
     test: '/kbs-web/test/',
     prod: '/kbs-web/prod/last/',
   }
-  const webTarget = process.env.OSS_WEB_TARGET ?? env.OSS_WEB_TARGET
+  const webTarget = process.env.OSS_WEB_TARGET || env.OSS_WEB_TARGET
   const fixedBase = fixedWebBases[webTarget?.trim() || '']
 
   return {
