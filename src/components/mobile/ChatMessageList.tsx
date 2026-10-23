@@ -44,11 +44,15 @@ export default function ChatMessageList({
     const list = listRef.current
     const scroller = list?.closest<HTMLElement>('[data-chat-scroll]')
     if (!scroller) return
-    if (!hasMounted.current || wasNearBottom.current) {
+    if (!hasMounted.current) {
+      scroller.scrollTop = scroller.scrollHeight
+      hasMounted.current = true
+      wasNearBottom.current = true
+      return
+    }
+    if (wasNearBottom.current) {
       scroller.scrollTop = scroller.scrollHeight
     }
-    hasMounted.current = true
-    wasNearBottom.current = true
   }, [messages])
 
   return (
