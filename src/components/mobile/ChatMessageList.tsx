@@ -24,6 +24,7 @@ export default function ChatMessageList({
 }: ChatMessageListProps) {
   const listRef = useRef<HTMLUListElement>(null)
   const wasNearBottom = useRef(true)
+  const hasMounted = useRef(false)
 
   useEffect(() => {
     const list = listRef.current
@@ -42,8 +43,12 @@ export default function ChatMessageList({
   useEffect(() => {
     const list = listRef.current
     const scroller = list?.closest<HTMLElement>('[data-chat-scroll]')
-    if (!scroller || !wasNearBottom.current) return
-    scroller.scrollTop = scroller.scrollHeight
+    if (!scroller) return
+    if (!hasMounted.current || wasNearBottom.current) {
+      scroller.scrollTop = scroller.scrollHeight
+    }
+    hasMounted.current = true
+    wasNearBottom.current = true
   }, [messages])
 
   return (
