@@ -17,6 +17,7 @@ import { navigateWithH5ViewTransition } from '../app/router/h5Transition'
 import { refreshRemoteUnreadCount, useNotifications } from '../app/state/notifications'
 import { protectedFixtureRedirect, useOverlay } from '../app/fixtures/useFixture'
 import H5ScrollRestoration from '../components/mobile/H5ScrollRestoration'
+import MallWebView from '../pages/MallWebView'
 import Toast from '../components/ui/Toast'
 import { closeWebView } from '../services/nativeBridge'
 import { AUTH_EXPIRED_EVENT, AUTH_FAILURE_EVENT, setAuthFlowEnabled } from '../services/auth/session'
@@ -79,6 +80,10 @@ function H5RouteOutlet() {
       }
     }
   }, [nativeTransitionActive, navigationKind])
+
+  // Keep the real mall mounted at the shell level; its iframe is rendered separately below.
+  // The route outlet must not mount a second MallWebView while /mall is active.
+  if (location.pathname === '/mall') return null
 
   return (
     <div
@@ -256,11 +261,18 @@ export default function MobileLayout() {
             />
           )}
         </div>
-        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain" data-page-scroll>
+        <div className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain" data-page-scroll>
           {isActiveFormalH5Route(route) && (
             <H5ScrollRestoration previousPathname={scrollSourcePathname} />
           )}
           <H5RouteOutlet />
+          {/* Keep the iframe alive across tab changes; only hide its wrapper when another route is active. */}
+          <div
+            className={location.pathname === '/mall' ? 'absolute inset-0 z-10 bg-background' : 'hidden'}
+            aria-hidden={location.pathname !== '/mall'}
+          >
+            <MallWebView />
+          </div>
         </div>
         {showNav && <BottomNav variant={showLegacyNav ? 'legacy' : 'main'} />}
       </div>
