@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { AlertCircle, RotateCcw } from 'lucide-react'
 import { CHAT_BOT, CHAT_RETRY_LABEL, CHAT_SEND_FAILED_HINT, type ChatMessage } from '../../app/fixtures'
 import { hasChatRichText, sanitizeChatRichText } from './safeRichText'
@@ -21,8 +22,32 @@ export default function ChatMessageList({
   botGlyph = CHAT_BOT.glyph,
   className = '',
 }: ChatMessageListProps) {
+  const listRef = useRef<HTMLUListElement>(null)
+  const wasNearBottom = useRef(true)
+
+  useEffect(() => {
+    const list = listRef.current
+    const scroller = list?.closest<HTMLElement>('[data-chat-scroll]')
+    if (!scroller) return
+
+    const updatePosition = () => {
+      wasNearBottom.current =
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 80
+    }
+    scroller.addEventListener('scroll', updatePosition, { passive: true })
+    updatePosition()
+    return () => scroller.removeEventListener('scroll', updatePosition)
+  }, [])
+
+  useEffect(() => {
+    const list = listRef.current
+    const scroller = list?.closest<HTMLElement>('[data-chat-scroll]')
+    if (!scroller || !wasNearBottom.current) return
+    scroller.scrollTop = scroller.scrollHeight
+  }, [messages])
+
   return (
-    <ul className={`flex flex-col gap-4 ${className}`} data-chat-list>
+    <ul ref={listRef} className={`flex flex-col gap-4 ${className}`} data-chat-list>
       {messages.map((message) => {
         const isBot = message.role === 'bot'
         return (
