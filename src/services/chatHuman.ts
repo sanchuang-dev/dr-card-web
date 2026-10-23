@@ -22,7 +22,8 @@ export function connectChatSocket(token: string, callbacks: ChatSocketEvents): C
   if (!token) throw new AppError({ kind: 'http', status: 401, message: '请先登录' })
   const base = runtimePolicy.apiBaseUrl
   if (!base) throw new AppError({ kind: 'configuration', message: '客服连接地址尚未配置' })
-  const socket: Socket = io(new URL(base).origin, {
+  const socket: Socket = io(runtimePolicy.socketBaseUrl ?? new URL(base).origin, {
+    path: runtimePolicy.socketPath ?? '/socket.io',
     auth: { token },
     autoConnect: false,
     reconnection: true,
