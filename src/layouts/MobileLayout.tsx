@@ -269,6 +269,7 @@ export default function MobileLayout() {
           {/* Keep the iframe alive across tab changes; only hide its wrapper when another route is active. */}
           <div
             className={location.pathname === '/mall' ? 'absolute inset-0 z-10 bg-background' : 'hidden'}
+            data-h5-route-active={location.pathname === '/mall' ? 'true' : 'false'}
             aria-hidden={location.pathname !== '/mall'}
           >
             <MallWebView />
