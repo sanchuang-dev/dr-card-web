@@ -59,7 +59,7 @@ export default function ApiServiceChat() {
       <div className="px-4 pt-3">
         <p className="text-center text-xs text-text-tertiary">AI 客服 {CHAT_BOT.name} 为您服务</p>
       </div>
-      <section className="min-w-0 w-full flex-1 px-4 pb-4 pt-4" aria-label="客服聊天历史" data-human-stage={chat.humanAwait || human.active ? 'pending' : 'idle'}>
+      <section className="min-w-0 min-h-0 w-full flex-1 overflow-y-auto px-4 pb-4 pt-4" data-chat-scroll aria-label="客服聊天历史" data-human-stage={chat.humanAwait || human.active ? 'pending' : 'idle'}>
         {history.status === 'loading' ? (
           <p role="status" className="py-8 text-center text-sm text-text-secondary">正在加载客服历史…</p>
         ) : history.status === 'error' ? (
