@@ -26,51 +26,6 @@ describe('ChatMessageList mobile layout', () => {
     expect(container.querySelector('[data-chat-rich-text]')?.className).toContain('[overflow-wrap:anywhere]')
   })
 
-  it('scrolls new messages when already near bottom but preserves history reading position', () => {
-    const makeMessages = (count: number) => Array.from({ length: count }, (_, index) => ({
-      id: String(index + 1), role: 'user' as const, text: `消息 ${index + 1}`, status: 'sent' as const,
-    }))
-    const { container, rerender } = render(
-      <div data-chat-scroll style={{ height: 100, overflowY: 'auto' }}>
-        <ChatMessageList messages={makeMessages(2)} />
-      </div>,
-    )
-    const scroller = container.querySelector<HTMLElement>('[data-chat-scroll]')!
-    Object.defineProperties(scroller, {
-      scrollHeight: { configurable: true, value: 500 },
-      clientHeight: { configurable: true, value: 100 },
-    })
-
-    // First render starts at the newest message.
-    rerender(
-      <div data-chat-scroll style={{ height: 100, overflowY: 'auto' }}>
-        <ChatMessageList messages={makeMessages(3)} />
-      </div>,
-    )
-    expect(scroller.scrollTop).toBe(500)
-
-    // A reader who has scrolled up should not be forced to the bottom.
-    scroller.scrollTop = 0
-    fireEvent.scroll(scroller)
-    rerender(
-      <div data-chat-scroll style={{ height: 100, overflowY: 'auto' }}>
-        <ChatMessageList messages={makeMessages(4)} />
-      </div>,
-    )
-    expect(scroller.scrollTop).toBe(0)
-
-    // Returning near the bottom restores follow-new-message behavior.
-    scroller.scrollTop = 350
-    fireEvent.scroll(scroller)
-    rerender(
-      <div data-chat-scroll style={{ height: 100, overflowY: 'auto' }}>
-        <ChatMessageList messages={makeMessages(5)} />
-      </div>,
-    )
-    expect(scroller.scrollTop).toBe(500)
-  })
-
-
   it('follows new messages near the bottom and preserves position when reading history', () => {
     const makeMessages = (count: number) => Array.from({ length: count }, (_, index) => ({
       id: String(index + 1), role: 'user' as const, text: `消息 ${index + 1}`, status: 'sent' as const,
