@@ -55,7 +55,7 @@ export default function ApiServiceChat() {
   }, [location.hash])
 
   return (
-    <PageContainer className="flex min-h-full min-w-0 w-full flex-col pb-0" inset={false}>
+    <PageContainer className="h-full !min-h-0 min-w-0 w-full flex flex-col pb-0" inset={false}>
       <div className="px-4 pt-3">
         <p className="text-center text-xs text-text-tertiary">AI 客服 {CHAT_BOT.name} 为您服务</p>
       </div>
