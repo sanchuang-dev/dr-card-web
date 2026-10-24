@@ -6,6 +6,7 @@ import { AppError, createBusinessError, createContractError } from './http'
 import { signCardApiUrl } from './http/apiSignature'
 
 export const CHAT_TRANSFER_PATH = '/api/chatmessages/transfer'
+export const CHAT_SOCKET_NAMESPACE = '/socket.io'
 const transferResultSchema = { mode: 'human' } as const
 
 export type ChatSocketStatus = 'connecting' | 'connected' | 'disconnected' | 'unauthorized'
@@ -22,7 +23,7 @@ export function connectChatSocket(token: string, callbacks: ChatSocketEvents): C
   if (!token) throw new AppError({ kind: 'http', status: 401, message: '请先登录' })
   const base = runtimePolicy.apiBaseUrl
   if (!base) throw new AppError({ kind: 'configuration', message: '客服连接地址尚未配置' })
-  const socket: Socket = io(runtimePolicy.socketBaseUrl ?? new URL(base).origin, {
+  const socket: Socket = io(`${runtimePolicy.socketBaseUrl ?? new URL(base).origin}${CHAT_SOCKET_NAMESPACE}`, {
     path: runtimePolicy.socketPath ?? '/socket.io',
     auth: { token },
     autoConnect: false,
