@@ -48,7 +48,7 @@ describe('#138 Socket.IO client contract', () => {
     const status = vi.fn(), onMessage = vi.fn(), onConnected = vi.fn()
     const handle = connectChatSocket('secret-token', { onStatus: status, onMessage, onConnected })
     expect(mocks.io).toHaveBeenCalledWith('https://api.example.test/socket.io', expect.objectContaining({
-      auth: { token: 'secret-token' }, path: '/socket.io/', autoConnect: false, reconnection: true,
+      auth: { token: 'Bearer secret-token' }, path: '/socket.io/', autoConnect: false, reconnection: true,
     }))
     expect(mocks.socket.connect).toHaveBeenCalledOnce()
     mocks.socket.connected = true
@@ -77,7 +77,7 @@ describe('#138 Socket.IO client contract', () => {
     connectChatSocket('secret-token', { onStatus: vi.fn(), onMessage: vi.fn(), onConnected: vi.fn() })
     expect(mocks.io).toHaveBeenCalledWith('https://socket.example.test/socket.io', expect.objectContaining({
       path: '/realtime/socket.io/',
-      auth: { token: 'secret-token' },
+      auth: { token: 'Bearer secret-token' },
     }))
   })
 
