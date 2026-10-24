@@ -184,7 +184,7 @@ function MockServiceChat() {
         </p>
       </div>
 
-      <div className="min-w-0 w-full flex-1 px-4 pb-4 pt-4" data-human-stage={humanStage}>
+      <div className="min-w-0 min-h-0 w-full flex-1 overflow-y-auto px-4 pb-4 pt-4" data-human-stage={humanStage}>
         <ChatMessageList messages={messages} onRetry={retry} />
       </div>
 
