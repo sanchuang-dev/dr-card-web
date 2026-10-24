@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { runtimePolicy } from '../app/config/runtime'
 import { Button, LoadingIndicator } from '../components/ui'
 import {
@@ -26,8 +27,21 @@ export interface MallWebViewProps {
  * - 商城换域名/路径时只改 `MALL_SHOPS`，本页不写死地址。
  */
 export default function MallWebView({ target }: MallWebViewProps) {
+  const location = useLocation()
   const mallTarget = target ?? resolveMallTarget()
   const shop = MALL_SHOPS[mallTarget]
+  // Only allow the two profile destinations requested by product; never treat a query
+  // parameter as an arbitrary iframe URL or permit an external-origin navigation.
+  const requestedPath = new URLSearchParams(location.search).get('path')
+  const mallPath = requestedPath === '/pages/goods/order_list/index'
+    ? '/pages/goods/order_list/index'
+    : requestedPath === '/pages/users/user_address_list/index'
+      ? '/pages/users/user_address_list/index'
+      : '/'
+  const targetUrl = new URL(shop.url)
+  targetUrl.pathname = mallPath
+  targetUrl.search = ''
+  const mallUrl = targetUrl.toString()
 
   const [iframe, setIframe] = useState<HTMLIFrameElement | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -59,10 +73,10 @@ export default function MallWebView({ target }: MallWebViewProps) {
 
     // 监听器就绪后再开始导航，避免 B 的首个 SSO.REQUEST 早于监听器。
     // StrictMode 下 effect 会执行两次，已导航到目标地址时不要重复加载商城。
-    if (iframe.src !== shop.url) iframe.src = shop.url
+    if (iframe.src !== mallUrl) iframe.src = mallUrl
 
     return () => bridge.dispose()
-  }, [iframe, mallTarget, shop.url])
+  }, [iframe, mallTarget, mallUrl])
 
   useEffect(() => {
     if (!iframe || loaded || problem) return
@@ -110,7 +124,7 @@ export default function MallWebView({ target }: MallWebViewProps) {
         className="h-full w-full flex-1 border-0"
         onLoad={(event) => {
           // 初始 about:blank 也会触发 load，只认商城自己的地址。
-          if (event.currentTarget.src === shop.url) setLoaded(true)
+          if (event.currentTarget.src === mallUrl) setLoaded(true)
         }}
       />
     </div>
