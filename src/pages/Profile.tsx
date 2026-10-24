@@ -34,8 +34,8 @@ type Tile = {
 const tiles: Tile[] = [
   { icon: Ticket, name: '卡券兑换', from: '#FFF8E6', deep: '#F4DFA9', color: '#B5793B', to: '/redeem' },
   { icon: Crown, name: '会员权益', from: '#FFF4CF', deep: '#E8C361', color: '#8A5A10', to: '/membership' },
-  { icon: ClipboardList, name: '订单管理', from: '#FFF3EB', deep: '#FFD3C0', color: '#D63D10', to: '/orders' },
-  { icon: MapPin, name: '地址管理', from: '#FFF8E6', deep: '#F3DFA9', color: '#9A6110', to: '/address' },
+  { icon: ClipboardList, name: '订单管理', from: '#FFF3EB', deep: '#FFD3C0', color: '#D63D10', to: '/mall?path=%2Fpages%2Fgoods%2Forder_list%2Findex' },
+  { icon: MapPin, name: '地址管理', from: '#FFF8E6', deep: '#F3DFA9', color: '#9A6110', to: '/mall?path=%2Fpages%2Fusers%2Fuser_address_list%2Findex' },
   { icon: UserRoundPlus, name: '绑定搭子', from: '#EFFCFE', deep: '#CDEFF5', color: '#0E9FB3', to: '/buddy' },
   { icon: Gift, name: '品牌福利官', from: '#EEFAF3', deep: '#CDEAD9', color: '#147A4C', to: '/service/welfare-officer' },
   { icon: Headphones, name: '客服中心', from: '#F6F8FB', deep: '#E1E6ED', color: '#535D72', to: '/service/chat' },
