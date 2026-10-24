@@ -23,36 +23,36 @@ export default function ChatMessageList({
   className = '',
 }: ChatMessageListProps) {
   const listRef = useRef<HTMLUListElement>(null)
-  const wasNearBottom = useRef(true)
-  const hasMounted = useRef(false)
+  const followBottomRef = useRef(true)
+  const previousScrollHeightRef = useRef(0)
+  const previousMessageCountRef = useRef(0)
+  const previousFirstMessageIdRef = useRef<string | undefined>(undefined)
 
   useEffect(() => {
     const list = listRef.current
     const scroller = list?.closest<HTMLElement>('[data-chat-scroll]')
     if (!scroller) return
 
-    const updatePosition = () => {
-      wasNearBottom.current =
-        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 80
+    const onScroll = () => {
+      followBottomRef.current = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 48
     }
-    scroller.addEventListener('scroll', updatePosition, { passive: true })
-    updatePosition()
-    return () => scroller.removeEventListener('scroll', updatePosition)
-  }, [])
+    scroller.addEventListener('scroll', onScroll, { passive: true })
 
-  useEffect(() => {
-    const list = listRef.current
-    const scroller = list?.closest<HTMLElement>('[data-chat-scroll]')
-    if (!scroller) return
-    if (!hasMounted.current) {
-      scroller.scrollTop = scroller.scrollHeight
-      hasMounted.current = true
-      wasNearBottom.current = true
-      return
+    const previousHeight = previousScrollHeightRef.current
+    const currentHeight = scroller.scrollHeight
+    const firstMessageId = messages[0]?.id
+    const historyPrepended = previousHeight > 0 && messages.length > previousMessageCountRef.current &&
+      firstMessageId !== previousFirstMessageIdRef.current
+    if (previousHeight === 0 || followBottomRef.current) {
+      scroller.scrollTop = Math.max(0, currentHeight - scroller.clientHeight)
+    } else if (historyPrepended && currentHeight > previousHeight) {
+      scroller.scrollTop += currentHeight - previousHeight
     }
-    if (wasNearBottom.current) {
-      scroller.scrollTop = scroller.scrollHeight
-    }
+    previousScrollHeightRef.current = currentHeight
+    previousMessageCountRef.current = messages.length
+    previousFirstMessageIdRef.current = firstMessageId
+
+    return () => scroller.removeEventListener('scroll', onScroll)
   }, [messages])
 
   return (
