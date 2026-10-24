@@ -1,6 +1,6 @@
 # H5 客服接口与实时消息合同
 
-> **更新日期：2026-10-24。** 本文记录 H5 当前接入应遵守的移动端接口合同，重点补充 SSE 错误处理、转人工前的 Socket 连接顺序，以及 Socket.IO 命名空间与 Engine.IO transport path 的区别。若后端部署版本与本文不一致，应由前后端联调确认并同步修订文档，不要仅凭旧 OpenAPI 快照推断运行时行为。
+> **更新日期：2026-10-24。** 本文记录 H5 当前接入应遵守的移动端接口合同，重点补充 SSE 错误处理、转人工前的 Socket 连接顺序，以及 Socket.IO 默认命名空间与 Engine.IO transport path 的区别。若后端部署版本与本文不一致，应由前后端联调确认并同步修订文档，不要仅凭旧 OpenAPI 快照推断运行时行为。
 
 ## 1. 通用认证与身份安全
 
@@ -55,19 +55,19 @@ Content-Type: application/json
 
 ### 4.1 Namespace 与 transport path 是两个概念
 
-客户端必须连接 **`/socket.io` namespace**：
+客户端连接后端注册的默认 **`/` namespace**，并通过 `path` 指定 Engine.IO transport path：
 
 ```ts
-io('https://api.example.com/socket.io', {
+io('https://api.example.com', {
   auth: { token: accessToken },
   // Engine.IO transport path；它与上面的 namespace URL 不同
   path: '/socket.io/',
 })
 ```
 
-- `io('https://api.example.com')` 连接的是默认 `/` namespace，不符合本 H5 接口合同。
-- URL 中的 `/socket.io` 是 Socket.IO namespace。
-- 配置项 `path` 是 Engine.IO HTTP/WebSocket transport path，默认常见值为 `/socket.io/`；若部署环境配置了反向代理路径，应按环境配置单独设置，不能用它替代 namespace。
+- 后端源码 `API/src/app/api/socket/ChatSocket.ts` 注册的是默认 `/` namespace，因此客户端 URL 不应追加 `/socket.io`。
+- `path` 才是 Engine.IO HTTP/WebSocket transport path，默认常见值为 `/socket.io/`；若部署环境配置了反向代理路径，应按环境配置单独设置。
+- `/socket.io` 常见地是 transport path，并不自动代表 Socket.IO namespace；只有后端明确注册 `io.of('/socket.io')` 时才应将它作为 namespace。
 - 只监听 `chat:message` 接收人工坐席消息；客户端发送消息仍使用 HTTP API。
 
 ### 4.2 消息格式、排序与去重
@@ -90,7 +90,7 @@ io('https://api.example.com/socket.io', {
 
 ## 6. 推荐流程
 
-1. 页面加载后获取历史消息，并建立 Socket.IO `/socket.io` namespace 连接。
+1. 页面加载后获取历史消息，并建立 Socket.IO 默认 `/` namespace 连接，transport path 使用环境配置（通常为 `/socket.io/`）。
 2. 用户发送内容时，调用 `POST /api/chatmessages/add` 并消费 SSE。
 3. 当用户选择转人工时，先确认 Socket 已连接，再调用 `POST /api/chatmessages/transfer`。
 4. 收到 `chat:message` 后按消息 `id` 去重并更新会话列表。
@@ -99,4 +99,4 @@ io('https://api.example.com/socket.io', {
 
 ## 7. 验收边界
 
-自动化测试可验证 URL namespace、transport path、token 传递、消息去重和错误处理逻辑；它不能证明目标测试环境已经部署匹配的后端，也不能替代真实坐席联调。上线/验收前应在目标环境使用授权账号完成 AI SSE 回复、转人工、坐席回复推送、断线重连补历史及 Android/iOS WebView 验证。
+自动化测试可验证 默认 namespace、transport path、token 传递、消息去重和错误处理逻辑；它不能证明目标测试环境已经部署匹配的后端，也不能替代真实坐席联调。上线/验收前应在目标环境使用授权账号完成 AI SSE 回复、转人工、坐席回复推送、断线重连补历史及 Android/iOS WebView 验证。
