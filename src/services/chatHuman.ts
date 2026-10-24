@@ -22,7 +22,10 @@ export function connectChatSocket(token: string, callbacks: ChatSocketEvents): C
   if (!token) throw new AppError({ kind: 'http', status: 401, message: '请先登录' })
   const base = runtimePolicy.apiBaseUrl
   if (!base) throw new AppError({ kind: 'configuration', message: '客服连接地址尚未配置' })
-  const socket: Socket = io(new URL(base).origin, {
+  // 命名空间必须写在 URL 里：后端是 @WSController('/socket.io')，连默认命名空间 / 会静默连上但收不到任何推送。
+  // path 只是 engine.io 的传输路径，和命名空间是两回事。
+  const socket: Socket = io(new URL(base).origin + '/socket.io', {
+    path: '/socket.io',
     auth: { token },
     autoConnect: false,
     reconnection: true,
