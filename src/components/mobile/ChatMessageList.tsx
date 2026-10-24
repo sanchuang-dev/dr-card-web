@@ -25,6 +25,8 @@ export default function ChatMessageList({
   const listRef = useRef<HTMLUListElement>(null)
   const followBottomRef = useRef(true)
   const previousScrollHeightRef = useRef(0)
+  const previousMessageCountRef = useRef(0)
+  const previousFirstMessageIdRef = useRef<string | undefined>(undefined)
 
   useEffect(() => {
     const list = listRef.current
@@ -38,13 +40,18 @@ export default function ChatMessageList({
 
     const previousHeight = previousScrollHeightRef.current
     const currentHeight = scroller.scrollHeight
+    const firstMessageId = messages[0]?.id
+    const historyPrepended = previousHeight > 0 && messages.length > previousMessageCountRef.current &&
+      firstMessageId !== previousFirstMessageIdRef.current
     if (previousHeight === 0 || followBottomRef.current) {
-      scroller.scrollTop = currentHeight
-    } else if (currentHeight > previousHeight) {
+      scroller.scrollTop = Math.max(0, currentHeight - scroller.clientHeight)
+    } else if (historyPrepended && currentHeight > previousHeight) {
       // Preserve the reader's viewport when older history is prepended.
       scroller.scrollTop += currentHeight - previousHeight
     }
     previousScrollHeightRef.current = currentHeight
+    previousMessageCountRef.current = messages.length
+    previousFirstMessageIdRef.current = firstMessageId
 
     return () => scroller.removeEventListener('scroll', onScroll)
   }, [messages])
