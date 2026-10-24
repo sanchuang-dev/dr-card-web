@@ -26,45 +26,50 @@ describe('ChatMessageList mobile layout', () => {
     expect(container.querySelector('[data-chat-rich-text]')?.className).toContain('[overflow-wrap:anywhere]')
   })
 
-  it('uses the constrained page-height chain for follow-bottom and history preservation', () => {
+  it('follows new messages near the bottom and preserves position when reading history', () => {
     const makeMessages = (count: number) => Array.from({ length: count }, (_, index) => ({
       id: String(index + 1), role: 'user' as const, text: `消息 ${index + 1}`, status: 'sent' as const,
     }))
-    const renderChat = (count: number) => (
-      <div data-page-scroll style={{ height: 800, overflowY: 'auto' }}>
-        <PageContainer className="h-full !min-h-0 min-w-0 w-full flex flex-col pb-0" inset={false}>
-          <div className="shrink-0">客服标题</div>
-          <section className="min-w-0 min-h-0 w-full flex-1 overflow-y-auto" data-chat-scroll>
-            <ChatMessageList messages={makeMessages(count)} />
-          </section>
-          <div className="shrink-0">消息输入区</div>
-        </PageContainer>
-      </div>
+    let scrollHeight = 200
+    const renderChat = (messages: ReturnType<typeof makeMessages>) => (
+      <PageContainer className="h-full !min-h-0 min-w-0 w-full flex flex-col pb-0" inset={false}>
+        <div className="shrink-0">客服标题</div>
+        <section
+          className="min-w-0 min-h-0 w-full flex-1 overflow-y-auto"
+          data-chat-scroll
+          ref={(node) => {
+            if (node) {
+              Object.defineProperty(node, 'clientHeight', { configurable: true, value: 100 })
+              Object.defineProperty(node, 'scrollHeight', { configurable: true, get: () => scrollHeight })
+            }
+          }}
+        >
+          <ChatMessageList messages={messages} />
+        </section>
+        <div className="shrink-0">消息输入区</div>
+      </PageContainer>
     )
-    const { container, rerender } = render(renderChat(2))
+    const { container, rerender } = render(renderChat(makeMessages(2)))
     const page = container.querySelector<HTMLElement>('[data-page-container]')!
     const scroller = container.querySelector<HTMLElement>('[data-chat-scroll]')!
     expect(page.className).toContain('h-full')
     expect(page.className).toContain('!min-h-0')
     expect(scroller.className).toContain('min-h-0')
     expect(scroller.className).toContain('overflow-y-auto')
+    expect(scroller.scrollTop).toBe(100)
 
-    Object.defineProperties(scroller, {
-      scrollHeight: { configurable: true, value: 500 },
-      clientHeight: { configurable: true, value: 100 },
-    })
-
-    rerender(renderChat(3))
-    expect(scroller.scrollTop).toBe(500)
+    scrollHeight = 300
+    rerender(renderChat(makeMessages(3)))
+    expect(scroller.scrollTop).toBe(200)
 
     scroller.scrollTop = 0
     fireEvent.scroll(scroller)
-    rerender(renderChat(4))
+    scrollHeight = 400
+    rerender(renderChat(makeMessages(4)))
     expect(scroller.scrollTop).toBe(0)
 
-    scroller.scrollTop = 350
-    fireEvent.scroll(scroller)
-    rerender(renderChat(5))
-    expect(scroller.scrollTop).toBe(500)
+    scrollHeight = 500
+    rerender(renderChat([{ id: '0', role: 'user', text: '更早的消息', status: 'sent' }, ...makeMessages(4)]))
+    expect(scroller.scrollTop).toBe(100)
   })
 })
