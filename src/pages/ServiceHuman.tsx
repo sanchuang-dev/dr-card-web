@@ -62,8 +62,8 @@ export default function ServiceHuman() {
   }
 
   return (
-    <PageContainer className="flex min-h-full flex-col pb-0" inset={false}>
-      <div className="px-4 pt-3" data-queue-state={queueState}>
+    <PageContainer className="h-full !min-h-0 flex flex-col pb-0" inset={false}>
+      <div className="shrink-0 px-4 pt-3" data-queue-state={queueState}>
         {connected ? (
           <div className="flex items-center gap-2.5 rounded-container bg-surface px-3.5 py-3 shadow-sm">
             <span
@@ -84,12 +84,12 @@ export default function ServiceHuman() {
         )}
       </div>
 
-      <div className="flex-1 px-4 pb-4 pt-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4">
         {/* 历史消息仍是小诗说的，头像保持「诗」；坐席开场语自带 glyph 区分说话人 */}
         <ChatMessageList messages={messages} />
       </div>
 
-      <div className="sticky bottom-0 border-t border-border-subtle bg-background px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
+      <div className="shrink-0 border-t border-border-subtle bg-background px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
         <div className="flex items-end gap-2">
           <div className="flex min-h-11 flex-1 items-center rounded-container border-2 border-transparent bg-surface px-3 focus-within:border-border-focused">
             <input

@@ -55,11 +55,11 @@ export default function ApiServiceChat() {
   }, [location.hash])
 
   return (
-    <PageContainer className="flex min-h-full min-w-0 w-full flex-col pb-0" inset={false}>
-      <div className="px-4 pt-3">
+    <PageContainer className="h-full !min-h-0 min-w-0 w-full flex flex-col pb-0" inset={false}>
+      <div className="shrink-0 px-4 pt-3">
         <p className="text-center text-xs text-text-tertiary">AI 客服 {CHAT_BOT.name} 为您服务</p>
       </div>
-      <section className="min-w-0 w-full flex-1 px-4 pb-4 pt-4" aria-label="客服聊天历史" data-human-stage={chat.humanAwait || human.active ? 'pending' : 'idle'}>
+      <section className="min-w-0 min-h-0 w-full flex-1 overflow-y-auto px-4 pb-4 pt-4" aria-label="客服聊天历史" data-human-stage={chat.humanAwait || human.active ? 'pending' : 'idle'}>
         {history.status === 'loading' ? (
           <p role="status" className="py-8 text-center text-sm text-text-secondary">正在加载客服历史…</p>
         ) : history.status === 'error' ? (
@@ -92,7 +92,7 @@ export default function ApiServiceChat() {
         )}
       </section>
 
-      <div className="sticky bottom-0 border-t border-border-subtle bg-background px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
+      <div className="shrink-0 border-t border-border-subtle bg-background px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
         {chat.error && (
           <div role="alert" className="mb-3 rounded-container bg-surface px-3 py-2 text-xs text-danger-text">
             <p>{chat.error}</p>
