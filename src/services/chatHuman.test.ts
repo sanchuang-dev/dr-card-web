@@ -44,10 +44,10 @@ beforeEach(() => {
 })
 
 describe('#138 Socket.IO client contract', () => {
-  it('connects the backend default namespace using auth.token and the Engine.IO transport path', () => {
+  it('connects the documented /socket.io namespace using auth.token and the Engine.IO transport path', () => {
     const status = vi.fn(), onMessage = vi.fn(), onConnected = vi.fn()
     const handle = connectChatSocket('secret-token', { onStatus: status, onMessage, onConnected })
-    expect(mocks.io).toHaveBeenCalledWith('https://api.example.test', expect.objectContaining({
+    expect(mocks.io).toHaveBeenCalledWith('https://api.example.test/socket.io', expect.objectContaining({
       auth: { token: 'secret-token' }, path: '/socket.io/', autoConnect: false, reconnection: true,
     }))
     expect(mocks.socket.connect).toHaveBeenCalledOnce()
@@ -71,11 +71,11 @@ describe('#138 Socket.IO client contract', () => {
   })
 
 
-  it('uses an explicitly configured Socket.IO origin and Engine.IO path without changing the default namespace', () => {
+  it('uses the documented namespace and independently configured Engine.IO path', () => {
     mocks.runtime.socketBaseUrl = 'https://socket.example.test'
     mocks.runtime.socketPath = '/realtime/socket.io/'
     connectChatSocket('secret-token', { onStatus: vi.fn(), onMessage: vi.fn(), onConnected: vi.fn() })
-    expect(mocks.io).toHaveBeenCalledWith('https://socket.example.test', expect.objectContaining({
+    expect(mocks.io).toHaveBeenCalledWith('https://socket.example.test/socket.io', expect.objectContaining({
       path: '/realtime/socket.io/',
       auth: { token: 'secret-token' },
     }))
