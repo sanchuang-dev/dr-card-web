@@ -84,7 +84,7 @@ export default function ServiceHuman() {
         )}
       </div>
 
-      <div className="flex-1 px-4 pb-4 pt-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4">
         {/* 历史消息仍是小诗说的，头像保持「诗」；坐席开场语自带 glyph 区分说话人 */}
         <ChatMessageList messages={messages} />
       </div>
