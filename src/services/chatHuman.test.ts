@@ -40,10 +40,11 @@ beforeEach(() => {
 })
 
 describe('#138 Socket.IO client contract', () => {
-  it('connects same-origin default namespace using auth.token, never URL/query credentials', () => {
+  it('connects the server /socket.io namespace using auth.token, never URL/query credentials', () => {
     const status = vi.fn(), onMessage = vi.fn(), onConnected = vi.fn()
     const handle = connectChatSocket('secret-token', { onStatus: status, onMessage, onConnected })
-    expect(mocks.io).toHaveBeenCalledWith('https://api.example.test', expect.objectContaining({
+    expect(mocks.io).toHaveBeenCalledWith('https://api.example.test/socket.io', expect.objectContaining({
+      path: '/socket.io',
       auth: { token: 'secret-token' }, autoConnect: false, reconnection: true,
     }))
     expect(mocks.socket.connect).toHaveBeenCalledOnce()
