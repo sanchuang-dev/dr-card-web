@@ -99,4 +99,4 @@ io('https://api.example.com', {
 
 ## 7. 验收边界
 
-自动化测试可验证 默认 namespace、transport path、token 传递、消息去重和错误处理逻辑；它不能证明目标测试环境已经部署匹配的后端，也不能替代真实坐席联调。上线/验收前应在目标环境使用授权账号完成 AI SSE 回复、转人工、坐席回复推送、断线重连补历史及 Android/iOS WebView 验证。
+自动化测试可验证默认 namespace、transport path、token 传递、消息去重和错误处理逻辑；它不能证明目标测试环境已经部署匹配的后端，也不能替代真实坐席联调。上线/验收前应在目标环境使用授权账号完成 AI SSE 回复、转人工、坐席回复推送、断线重连补历史及 Android/iOS WebView 验证。
