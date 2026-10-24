@@ -62,7 +62,7 @@ export default function ServiceHuman() {
   }
 
   return (
-    <PageContainer className="flex min-h-full flex-col pb-0" inset={false}>
+    <PageContainer className="h-full !min-h-0 flex flex-col pb-0" inset={false}>
       <div className="px-4 pt-3" data-queue-state={queueState}>
         {connected ? (
           <div className="flex items-center gap-2.5 rounded-container bg-surface px-3.5 py-3 shadow-sm">
