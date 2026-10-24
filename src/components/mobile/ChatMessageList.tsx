@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { AlertCircle, RotateCcw } from 'lucide-react'
 import { CHAT_BOT, CHAT_RETRY_LABEL, CHAT_SEND_FAILED_HINT, type ChatMessage } from '../../app/fixtures'
 import { hasChatRichText, sanitizeChatRichText } from './safeRichText'
@@ -21,8 +22,35 @@ export default function ChatMessageList({
   botGlyph = CHAT_BOT.glyph,
   className = '',
 }: ChatMessageListProps) {
+  const listRef = useRef<HTMLUListElement>(null)
+  const followBottomRef = useRef(true)
+  const previousScrollHeightRef = useRef(0)
+
+  useEffect(() => {
+    const list = listRef.current
+    const scroller = list?.parentElement
+    if (!scroller) return
+
+    const onScroll = () => {
+      followBottomRef.current = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 48
+    }
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+
+    const previousHeight = previousScrollHeightRef.current
+    const currentHeight = scroller.scrollHeight
+    if (previousHeight === 0 || followBottomRef.current) {
+      scroller.scrollTop = currentHeight
+    } else if (currentHeight > previousHeight) {
+      // Preserve the reader's viewport when older history is prepended.
+      scroller.scrollTop += currentHeight - previousHeight
+    }
+    previousScrollHeightRef.current = currentHeight
+
+    return () => scroller.removeEventListener('scroll', onScroll)
+  }, [messages])
+
   return (
-    <ul className={`flex flex-col gap-4 ${className}`} data-chat-list>
+    <ul ref={listRef} className={`flex flex-col gap-4 ${className}`} data-chat-list>
       {messages.map((message) => {
         const isBot = message.role === 'bot'
         return (
