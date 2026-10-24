@@ -176,7 +176,7 @@ function MockServiceChat() {
       : CHAT_BOT.inputPlaceholder
 
   return (
-    <PageContainer className="flex min-h-full min-w-0 w-full flex-col pb-0" inset={false}>
+    <PageContainer className="h-full !min-h-0 min-w-0 w-full flex flex-col pb-0" inset={false}>
       {/* 标题栏提供独立的福利官二维码入口；底部人工按钮只负责聊天转接。 */}
       <div className="px-4 pt-3">
         <p className="text-center text-xs text-text-tertiary">
