@@ -15,6 +15,11 @@ export interface MallWebViewProps {
   target?: MallTarget
 }
 
+const PROFILE_MALL_PATHS = new Set([
+  '/pages/goods/order_list/index',
+  '/pages/users/user_address_list/index',
+])
+
 /**
  * 商城 H5 承载页
  * -------------------------------------------------------------
@@ -30,17 +35,19 @@ export default function MallWebView({ target }: MallWebViewProps) {
   const location = useLocation()
   const mallTarget = target ?? resolveMallTarget()
   const shop = MALL_SHOPS[mallTarget]
-  // Only allow the two profile destinations requested by product; never treat a query
-  // parameter as an arbitrary iframe URL or permit an external-origin navigation.
+  // Only allow the two profile destinations requested by product. Preserve the configured
+  // shop base path (e.g. /h5) and never accept arbitrary URLs from the query string.
   const requestedPath = new URLSearchParams(location.search).get('path')
-  const mallPath = requestedPath === '/pages/goods/order_list/index'
-    ? '/pages/goods/order_list/index'
-    : requestedPath === '/pages/users/user_address_list/index'
-      ? '/pages/users/user_address_list/index'
-      : '/'
+  const mallPath = requestedPath && PROFILE_MALL_PATHS.has(requestedPath)
+    ? requestedPath
+    : null
   const targetUrl = new URL(shop.url)
-  targetUrl.pathname = mallPath
+  if (mallPath) {
+    const basePath = targetUrl.pathname.replace(/\/$/, '')
+    targetUrl.pathname = `${basePath}${mallPath}`
+  }
   targetUrl.search = ''
+  targetUrl.hash = ''
   const mallUrl = targetUrl.toString()
 
   const [iframe, setIframe] = useState<HTMLIFrameElement | null>(null)
