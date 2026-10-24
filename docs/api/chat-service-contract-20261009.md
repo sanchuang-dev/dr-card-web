@@ -1,28 +1,102 @@
-# 客服接口最新合同：2026-10-09
+# H5 客服接口与实时消息合同
 
-> **权威性与版本**：本文件依据后台同事当前交付的源码核对，不是根据旧 Swagger 猜测。证据文件位于项目工作区的 `API/` 仓库，核对日期 2026-10-09。旧快照 `docs/api/dearseed-openapi.json` 抓取于 **2026-09-16**，其 `ChatMessagesSave` 属已下线的 CRUD 形式，**不能作为当前用户端客服的入参定义**。当前后台若继续调整，需要重新核对源码和联调。
+> **更新日期：2026-10-24。** 本文记录 H5 当前接入应遵守的移动端接口合同，重点补充 SSE 错误处理、转人工前的 Socket 连接顺序，以及当前 H5 接口合同规定的 Socket.IO 命名空间与 Engine.IO transport path 的区别。若后端部署版本与本文不一致，应由前后端联调确认并同步修订文档，不要仅凭旧 OpenAPI 快照推断运行时行为。
 
-## 后端源码证据
+## 1. 通用认证与身份安全
 
-- `API/src/app/api/validate/ChatMessages.ts`：`ChatMessagesAdd` 只定义 **必填 `content`（1–5000 字）**、可选 `msg_type`（1–6、8；默认 1），不接受客户端 `user_id` 和 `sender_id`；`ChatMessagesTransfer` 的 `content` 可选。
-- `API/src/app/api/controller/ChatMessages.ts`：`POST /api/chatmessages/add` 从 `service.userId()` 取得用户身份，存储用户消息，然后返回 SSE `text/human/done/error`；`POST /api/chatmessages/transfer` 存真实转人工状态，正常走 JSON envelope；`GET /api/chatmessages/index` 提供历史。
-- `API/src/app/api/socket/ChatSocket.ts`：默认命名空间 `/`，`auth.token` 握手，服务端解析登录用户并加入自己的 room；鉴权不通过推 `error` 并断开。
-- `API/src/app/common/service/Chat.ts`：人工坐席推送事件 `chat:message`。推送仅收不发，客户端发送仍走 HTTP。
-- `API/docs/api-service-chat.md`：后端提供的综合客服 API/Socket.IO/SSE 联调文档。
+- 所有以下 HTTP 接口均使用 `Authorization: Bearer <accessToken>`。
+- Socket.IO 握手通过 `auth: { token: accessToken }` 传递 token；不要把 token 放在 URL 或 query string。
+- H5 不传 `user_id` 或 `sender_id`，用户身份由服务端根据 token 确定。
+- Socket 鉴权失败时，服务端可能先发送 `error` 再断开；前端应进入未授权状态并停止无限重连。token 更新后，使用新 token 重建 socket。
 
-## 用户端接口定义
+## 2. 发送消息：SSE
 
-| 接口 | 请求 | 认证 | 成功 |
-|---|---|---|---|
-| `GET /api/chatmessages/index?page=1&pageSize=30` | 查询参数 `page, pageSize` | Bearer token | `{code:0,data:{data:[],current_page,per_page,total,last_page}}` |
-| `POST /api/chatmessages/add` | `{content:string,msg_type?:number}` | Bearer token | `text/event-stream`；`text` 增量、`human` 模式、`done.message_id`、`error.message` |
-| `POST /api/chatmessages/transfer` | `{content?:string}` | Bearer token | `{code:0,data:{mode:"human"}}` |
-| `Socket.IO /` | `auth:{token:accessToken}` | 握手令牌 | `chat:message` 推送完整存储记录 |
+`POST /api/chatmessages/add`
 
-安全约束：**不允许由 H5 决定用户身份**；`user_id/sender_id` 服务端依据 token 写入。旧 OpenAPI 里 `ChatMessagesSave.required=["user_id","sender_id","msg_type"]` 是 9 月旧 CRUD 合同，不符合当前控制器 DTO，**优先当前后台源码定义**。不要为通过旧文档的验证而传入可伪造身份。
+请求头：
 
-Socket `chat:message` 返回 `id, user_id, sender_id, content, msg_type, create_time`；时间戳为秒级数字，历史接口则可能返回 SQL 字符串。均以服务端 ID 排序去重。重连后 `GET index` 补消息，推送本身不补发。
+```http
+Authorization: Bearer <accessToken>
+Accept: text/event-stream
+Content-Type: application/json
+```
 
-## 验收边界
+请求体示例：
 
-本文件证明**当前交付的后端源码存在这套合同**，不证明阿里云 / 测试环境已部署相同版本、Redis 服务与真实人工坐席正在运行。正式完成要用授权账号在目标测试环境完成 `/add`、`/transfer`、后台 `/admin/chatmessages/send` → H5 Socket `chat:message`，以及 Android/iOS WebView 断线重连验收。人工客服未在线不应伪造排队人数、等待时长或姓名。
+```json
+{ "content": "我想咨询一下订单" }
+```
+
+- 使用 `fetch` 发起 POST 并读取 SSE 流；不要使用只适合 GET 的原生 `EventSource`。
+- 不需要提交对话历史、`user_id` 或 `sender_id`。
+- 识别以 `data:` 开头的 SSE 行；忽略注释/心跳行（例如 `: ok`）以及其他非 `data:` 行。
+- 流内事件：
+  - `text`：AI 回复的增量文本。
+  - `human`：对话已进入人工服务模式。
+  - `done`：本次生成结束；AI 消息的 `message_id` 可能存在。
+  - `error`：流内业务错误，应解析并向用户显示可理解的错误信息。
+- 在 SSE 流开始前，认证或参数校验失败可能返回普通 JSON，而非 `text/event-stream`。客户端必须先检查 HTTP 状态及响应内容类型，并兼容解析普通 JSON 错误，不能将其误判为 SSE 数据。
+
+## 3. 转人工
+
+`POST /api/chatmessages/transfer`
+
+请求体（可选）：
+
+```json
+{ "content": "最近一条用户消息（可选）" }
+```
+
+- 调用转人工接口前，先确保 Socket.IO 已连接；连接未成功时不要先提交转人工请求。
+- 成功响应的业务数据应满足 `data.mode === "human"`。
+- 转人工接口负责切换服务模式；人工坐席的后续回复通过 Socket.IO 的 `chat:message` 事件接收。用户发送消息仍走 HTTP，不通过 Socket.IO 发送。
+
+## 4. 接收人工消息：Socket.IO
+
+### 4.1 Namespace 与 transport path 是两个概念
+
+按照当前 H5 接口合同，客户端必须连接 **`/socket.io` namespace**，并通过 `path` 单独指定 Engine.IO transport path：
+
+```ts
+io('https://api.example.com/socket.io', {
+  auth: { token: accessToken },
+  // Engine.IO transport path；它与上面的 namespace URL 不同
+  path: '/socket.io/',
+})
+```
+
+- 当前 H5 接口合同明确规定 namespace 为 `/socket.io`，因此连接 URL 必须包含该 namespace。
+- `path` 是 Engine.IO HTTP/WebSocket transport path，默认常见值为 `/socket.io/`；若部署环境配置了反向代理路径，应按环境配置单独设置。
+- namespace 与 transport path 是独立配置：即使两者文本相似，也不能用其中一个替代另一个。部署后端必须注册与当前合同一致的 namespace。
+- 只监听 `chat:message` 接收人工坐席消息；客户端发送消息仍使用 HTTP API。
+
+### 4.2 消息格式、排序与去重
+
+`chat:message` 推送记录包含服务端消息标识 `id`、`user_id`、`sender_id`、`content`、`msg_type`、`create_time` 等字段。
+
+- Socket 推送中的 `create_time` 是秒级时间戳；历史接口中的 `create_time` 可能是字符串。
+- 消息以服务端 `id` 进行排序和去重；合并历史记录与实时推送时不能重复展示同一条消息。
+- Socket 断线期间的消息不会自动重放。每次成功重连后，应重新调用历史接口补齐离线期间遗漏的消息。
+- token 失效时不要无限重试；刷新 token 后应销毁旧连接并用新 token 创建连接。
+
+## 5. 拉取历史消息
+
+`GET /api/chatmessages/index?page=1&pageSize=15`
+
+- 使用 Bearer token。
+- 消息列表位于 `data.data`；接口按 `id` 倒序返回，前端合并后按消息 ID 排序显示。
+- 历史数据包含用户、客服及系统消息；与 Socket 推送按 `id` 去重。
+- 建立连接后的首次加载，以及每次成功重连后，都应拉取历史以补齐可能遗漏的消息。
+
+## 6. 推荐流程
+
+1. 页面加载后获取历史消息，并建立 Socket.IO `/socket.io` namespace 连接，transport path 使用环境配置（通常为 `/socket.io/`）。
+2. 用户发送内容时，调用 `POST /api/chatmessages/add` 并消费 SSE。
+3. 当用户选择转人工时，先确认 Socket 已连接，再调用 `POST /api/chatmessages/transfer`。
+4. 收到 `chat:message` 后按消息 `id` 去重并更新会话列表。
+5. Socket 成功重连后重新拉取 `GET /api/chatmessages/index`，补齐断线期间未收到的消息。
+6. 对 SSE 流开始前的 JSON 错误、流内 `error` 事件及 Socket 鉴权失败分别处理，避免把连接成功误认为业务消息链路正常。
+
+## 7. 验收边界
+
+自动化测试可验证 `/socket.io` namespace、transport path、token 传递、消息去重和错误处理逻辑；它不能证明目标测试环境已经部署匹配的后端，也不能替代真实坐席联调。上线/验收前应在目标环境使用授权账号完成 AI SSE 回复、转人工、坐席回复推送、断线重连补历史及 Android/iOS WebView 验证。

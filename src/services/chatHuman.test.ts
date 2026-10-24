@@ -15,11 +15,12 @@ const mocks = vi.hoisted(() => {
   return {
     socket, handlers, io: vi.fn(() => socket), fetch: vi.fn(),
     token: 'secret-token', refresh: vi.fn(), signature: vi.fn(),
+    runtime: { apiBaseUrl: 'https://api.example.test/api', socketBaseUrl: null as string | null, socketPath: '/socket.io/' },
   }
 })
 vi.mock('socket.io-client', () => ({ io: mocks.io }))
 vi.mock('../app/config/runtime', () => ({
-  runtimePolicy: { apiBaseUrl: 'https://api.example.test/api', dataMode: 'api' },
+  runtimePolicy: mocks.runtime,
 }))
 vi.mock('./auth/session', () => ({
   getAuthSession: () => ({ accessToken: mocks.token }),
@@ -34,18 +35,20 @@ beforeEach(() => {
   mocks.socket.io.reconnection.mockClear()
   mocks.socket.connected = false
   mocks.token = 'secret-token'
+  mocks.runtime.apiBaseUrl = 'https://api.example.test/api'
+  mocks.runtime.socketBaseUrl = null
+  mocks.runtime.socketPath = '/socket.io/'
   mocks.fetch.mockReset(); mocks.refresh.mockReset()
   mocks.signature.mockReset().mockResolvedValue({ token: 'native-token', salt: 'test-salt' })
   vi.stubGlobal('fetch', mocks.fetch)
 })
 
 describe('#138 Socket.IO client contract', () => {
-  it('connects the server /socket.io namespace using auth.token, never URL/query credentials', () => {
+  it('connects the documented /socket.io namespace using auth.token and the Engine.IO transport path', () => {
     const status = vi.fn(), onMessage = vi.fn(), onConnected = vi.fn()
     const handle = connectChatSocket('secret-token', { onStatus: status, onMessage, onConnected })
     expect(mocks.io).toHaveBeenCalledWith('https://api.example.test/socket.io', expect.objectContaining({
-      path: '/socket.io',
-      auth: { token: 'secret-token' }, autoConnect: false, reconnection: true,
+      auth: { token: 'secret-token' }, path: '/socket.io/', autoConnect: false, reconnection: true,
     }))
     expect(mocks.socket.connect).toHaveBeenCalledOnce()
     mocks.socket.connected = true
@@ -65,6 +68,17 @@ describe('#138 Socket.IO client contract', () => {
     expect(mocks.socket.disconnect).toHaveBeenCalled()
     expect(mocks.socket.removeAllListeners).toHaveBeenCalled()
     expect(handle.connected()).toBe(false)
+  })
+
+
+  it('uses the documented namespace and independently configured Engine.IO path', () => {
+    mocks.runtime.socketBaseUrl = 'https://socket.example.test'
+    mocks.runtime.socketPath = '/realtime/socket.io/'
+    connectChatSocket('secret-token', { onStatus: vi.fn(), onMessage: vi.fn(), onConnected: vi.fn() })
+    expect(mocks.io).toHaveBeenCalledWith('https://socket.example.test/socket.io', expect.objectContaining({
+      path: '/realtime/socket.io/',
+      auth: { token: 'secret-token' },
+    }))
   })
 
   it('stops reconnection on authorization error and does not leak token to callbacks', () => {
