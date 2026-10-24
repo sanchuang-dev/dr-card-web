@@ -99,7 +99,7 @@ export async function transferChatToHuman(signal?: AbortSignal): Promise<void> {
   // Complete signature preflight before entering the network-only error handler.
   // Missing Native credentials cannot be mistaken for an uncertain transfer.
   const credentials = await getApiSignatureCredentials()
-  const url = signCardApiUrl(base.replace(/\\/+$/, '').replace(/\\/api$/, '') + CHAT_TRANSFER_PATH,
+  const url = signCardApiUrl(base.replace(/\/+$/, '').replace(/\/api$/, '') + CHAT_TRANSFER_PATH,
     undefined, {}, credentials)
   let response: Response
   try {
