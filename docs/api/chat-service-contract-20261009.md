@@ -5,7 +5,7 @@
 ## 1. 通用认证与身份安全
 
 - 所有以下 HTTP 接口均使用 `Authorization: Bearer <accessToken>`。
-- Socket.IO 握手通过 `auth: { token: accessToken }` 传递 token；不要把 token 放在 URL 或 query string。
+- Socket.IO 握手通过 `auth: { token: 'Bearer ' + accessToken }` 传递 token，格式与 HTTP API 的 `Authorization: Bearer <accessToken>` 一致；不要把 token 放在 URL 或 query string。
 - H5 不传 `user_id` 或 `sender_id`，用户身份由服务端根据 token 确定。
 - Socket 鉴权失败时，服务端可能先发送 `error` 再断开；前端应进入未授权状态并停止无限重连。token 更新后，使用新 token 重建 socket。
 
@@ -59,7 +59,7 @@ Content-Type: application/json
 
 ```ts
 io('https://api.example.com/socket.io', {
-  auth: { token: accessToken },
+  auth: { token: `Bearer ${accessToken}` },
   // Engine.IO transport path；它与上面的 namespace URL 不同
   path: '/socket.io/',
 })
