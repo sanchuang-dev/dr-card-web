@@ -42,7 +42,7 @@ export const STORAGE_KEYS = {
   // after successful profile update. Never persist the PIN or its digest.
   newUserPopupSeen: defineStorageKey(
     'new-user-popup-seen',
-    'session',
+    'local',
     z.record(z.string(), z.literal(true)),
   ),
   profilePinMasks: defineStorageKey(
