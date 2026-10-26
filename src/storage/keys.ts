@@ -40,6 +40,11 @@ export const STORAGE_KEYS = {
   ),
   // User-confirmed UI preference: only retain a per-account six-dot mask flag
   // after successful profile update. Never persist the PIN or its digest.
+  newUserPopupSeen: defineStorageKey(
+    'new-user-popup-seen',
+    'session',
+    z.record(z.string(), z.literal(true)),
+  ),
   profilePinMasks: defineStorageKey(
     'profile-pin-masks',
     'local',
