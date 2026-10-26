@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { RouterProvider } from 'react-router-dom'
 import { router } from './app/router'
 import NewcomerDialog from './components/mobile/NewcomerDialog'
@@ -15,6 +15,7 @@ function getUserPopupSeenKey(userInfo: unknown): string | undefined {
 
 export default function App() {
   const [newUserPopup, setNewUserPopup] = useState<NewUserPopup | null>(null)
+  const pendingSeenKey = useRef<string | undefined>(undefined)
 
   useEffect(() => {
     let popupHandledThisDocument = false
@@ -22,6 +23,7 @@ export default function App() {
       const session = getAuthSession()
       if (session?.is_new_user !== true || !session.popup) {
         setNewUserPopup(null)
+        pendingSeenKey.current = undefined
         return
       }
 
@@ -32,13 +34,13 @@ export default function App() {
             setNewUserPopup(null)
             return
           }
-          window.sessionStorage.setItem(seenKey, '1')
         } catch {
           // Continue with in-memory deduplication if WebView storage is unavailable.
         }
       }
       if (popupHandledThisDocument) return
       popupHandledThisDocument = true
+      pendingSeenKey.current = seenKey
       setNewUserPopup(session.popup)
     }
 
@@ -48,7 +50,19 @@ export default function App() {
     return () => window.removeEventListener('dr-card-ui:auth-session-changed', handleSessionChanged)
   }, [])
 
-  const dismissPopup = () => setNewUserPopup(null)
+  const dismissPopup = () => {
+    const seenKey = pendingSeenKey.current
+    if (seenKey) {
+      try {
+        window.sessionStorage.setItem(seenKey, '1')
+      } catch {
+        // The in-memory session guard still prevents repeated display until reload.
+      }
+    }
+    pendingSeenKey.current = undefined
+    setNewUserPopup(null)
+  }
+
   return (
     <>
       <RouterProvider router={router} />
