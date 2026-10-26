@@ -17,7 +17,7 @@ export default function App() {
   const [newUserPopup, setNewUserPopup] = useState<NewUserPopup | null>(null)
 
   useEffect(() => {
-    let popupHandledWithoutUserId = false
+    let popupHandledThisDocument = false
     const handleSessionChanged = () => {
       const session = getAuthSession()
       if (session?.is_new_user !== true || !session.popup) {
@@ -36,11 +36,9 @@ export default function App() {
         } catch {
           // Continue with in-memory deduplication if WebView storage is unavailable.
         }
-      } else if (popupHandledWithoutUserId) {
-        return
-      } else {
-        popupHandledWithoutUserId = true
       }
+      if (popupHandledThisDocument) return
+      popupHandledThisDocument = true
       setNewUserPopup(session.popup)
     }
 
