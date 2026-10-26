@@ -231,18 +231,29 @@ export async function getApiSignatureCredentials(): Promise<ApiSignatureCredenti
 }
 
 /** Only these failures certify that signing stopped before HTTP transport. */
-export function isApiSignaturePreflightError(error: unknown) {
-  return isAppError(error) && error.code === 'AUTH_NATIVE_CREDENTIALS_UNAVAILABLE'
+export function isApiSignaturePreflightError(error: unknown): error is AppError {
+  return isAppError(error) &&
+    (error.code === 'AUTH_SIGNATURE_CREDENTIALS_MISSING' ||
+      error.code === 'AUTH_NATIVE_CREDENTIALS_INVALID' ||
+      error.code === 'AUTH_NATIVE_CREDENTIALS_UNAVAILABLE')
 }
 
-setHttpAuthHeadersProvider(() => {
-  const session = readSession()
-  return session ? { Authorization: `Bearer ${session.accessToken}` } : {}
-})
 setHttpSignatureCredentialsProvider(getApiSignatureCredentials)
+
+setHttpAuthHeadersProvider(() => {
+  // Route-level authFlowEnabled controls reauthentication/expiry UI, not credential attachment.
+  // Any same-origin API request with an existing session must carry its Bearer token.
+  const session = readSession()
+  return session ? { Authorization: `Bearer ${session.accessToken}` } : undefined
+})
 setHttpUnauthorizedHandler(() => {
-  if (authFlowEnabled) void reauthenticateAfterUnauthorized()
+  if (authFlowEnabled) return reauthenticateAfterUnauthorized()
 })
 setHttpAuthFailureHandler(() => {
-  clearAuthSession()
+  if (authFlowEnabled) {
+    clearAuthSession()
+    dispatchAuthEvent(AUTH_EXPIRED_EVENT)
+  }
 })
+
+export { AUTH_EXPIRED_EVENT, AUTH_FAILURE_EVENT }
