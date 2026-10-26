@@ -3,19 +3,20 @@ import { RouterProvider } from 'react-router-dom'
 import { router } from './app/router'
 import NewcomerDialog from './components/mobile/NewcomerDialog'
 import { getAuthSession, type NewUserPopup } from './services/auth/session'
+import { STORAGE_KEYS, storage } from './storage'
 
-function getUserPopupSeenKey(userInfo: unknown): string | undefined {
+function getUserPopupSeenId(userInfo: unknown): string | undefined {
   if (!userInfo || typeof userInfo !== 'object') return undefined
   const user = userInfo as Record<string, unknown>
   const id = user.id ?? user.user_id ?? user.uid
   return (typeof id === 'string' || typeof id === 'number') && String(id).trim()
-    ? `dr-card-ui:new-user-popup-seen:${String(id)}`
+    ? String(id)
     : undefined
 }
 
 export default function App() {
   const [newUserPopup, setNewUserPopup] = useState<NewUserPopup | null>(null)
-  const pendingSeenKey = useRef<string | undefined>(undefined)
+  const pendingSeenUserId = useRef<string | undefined>(undefined)
 
   useEffect(() => {
     let popupHandledThisDocument = false
@@ -23,24 +24,18 @@ export default function App() {
       const session = getAuthSession()
       if (session?.is_new_user !== true || !session.popup) {
         setNewUserPopup(null)
-        pendingSeenKey.current = undefined
+        pendingSeenUserId.current = undefined
         return
       }
 
-      const seenKey = getUserPopupSeenKey(session.userInfo)
-      if (seenKey) {
-        try {
-          if (window.sessionStorage.getItem(seenKey) === '1') {
-            setNewUserPopup(null)
-            return
-          }
-        } catch {
-          // Continue with in-memory deduplication if WebView storage is unavailable.
-        }
+      const seenUserId = getUserPopupSeenId(session.userInfo)
+      if (seenUserId && storage.read(STORAGE_KEYS.newUserPopupSeen)?.[seenUserId]) {
+        setNewUserPopup(null)
+        return
       }
       if (popupHandledThisDocument) return
       popupHandledThisDocument = true
-      pendingSeenKey.current = seenKey
+      pendingSeenUserId.current = seenUserId
       setNewUserPopup(session.popup)
     }
 
@@ -51,15 +46,12 @@ export default function App() {
   }, [])
 
   const dismissPopup = () => {
-    const seenKey = pendingSeenKey.current
-    if (seenKey) {
-      try {
-        window.sessionStorage.setItem(seenKey, '1')
-      } catch {
-        // The in-memory session guard still prevents repeated display until reload.
-      }
+    const seenUserId = pendingSeenUserId.current
+    if (seenUserId) {
+      const seenUsers = storage.read(STORAGE_KEYS.newUserPopupSeen) ?? {}
+      storage.write(STORAGE_KEYS.newUserPopupSeen, { ...seenUsers, [seenUserId]: true })
     }
-    pendingSeenKey.current = undefined
+    pendingSeenUserId.current = undefined
     setNewUserPopup(null)
   }
 
