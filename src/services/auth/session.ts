@@ -15,15 +15,20 @@ const AUTH_FAILURE_EVENT = 'dr-card-ui:auth-failure'
 const AUTH_EXPIRED_EVENT = 'dr-card-ui:auth-expired'
 const LOGIN_PATH = '/api/oauth/login'
 
+export interface NewUserPopup {
+  title: string
+  description: string
+  points: number | string
+}
+
 export interface AuthSession {
   userInfo: unknown
   accessToken: string
+  is_new_user?: boolean
+  popup?: NewUserPopup
 }
 
-interface LoginResponse {
-  userInfo: unknown
-  accessToken: string
-}
+interface LoginResponse extends AuthSession {}
 
 interface LoginEnvelope {
   code?: unknown
@@ -46,7 +51,8 @@ let signatureCredentials: ApiSignatureCredentials | undefined
 function readSession(): AuthSession | undefined {
   const value = storage.read(STORAGE_KEYS.authSession)
   if (value && value.accessToken.trim()) {
-    return { userInfo: volatileSession?.userInfo ?? null, accessToken: value.accessToken }
+    if (volatileSession?.accessToken === value.accessToken) return volatileSession
+    return { userInfo: null, accessToken: value.accessToken }
   }
   return volatileSession
 }
@@ -93,7 +99,20 @@ export function parseLoginResponse(result: unknown): LoginResponse {
     })
   }
 
-  return { userInfo: payload.userInfo, accessToken: payload.accessToken }
+  const popupValue = payload.popup
+  const popup = popupValue && typeof popupValue === 'object' ? popupValue as Partial<NewUserPopup> : undefined
+  const validPopup = popup && typeof popup.title === 'string' && popup.title.trim()
+    && typeof popup.description === 'string' && popup.description.trim()
+    && (typeof popup.points === 'number' || typeof popup.points === 'string')
+    ? { title: popup.title, description: popup.description, points: popup.points }
+    : undefined
+
+  return {
+    userInfo: payload.userInfo,
+    accessToken: payload.accessToken,
+    ...(typeof payload.is_new_user === 'boolean' ? { is_new_user: payload.is_new_user } : {}),
+    ...(validPopup ? { popup: validPopup } : {}),
+  }
 }
 
 async function loginFromNative(): Promise<AuthSession> {
@@ -212,29 +231,18 @@ export async function getApiSignatureCredentials(): Promise<ApiSignatureCredenti
 }
 
 /** Only these failures certify that signing stopped before HTTP transport. */
-export function isApiSignaturePreflightError(error: unknown): error is AppError {
-  return isAppError(error) &&
-    (error.code === 'AUTH_SIGNATURE_CREDENTIALS_MISSING' ||
-      error.code === 'AUTH_NATIVE_CREDENTIALS_INVALID' ||
-      error.code === 'AUTH_NATIVE_CREDENTIALS_UNAVAILABLE')
+export function isApiSignaturePreflightError(error: unknown) {
+  return isAppError(error) && error.code === 'AUTH_NATIVE_CREDENTIALS_UNAVAILABLE'
 }
 
-setHttpSignatureCredentialsProvider(getApiSignatureCredentials)
-
 setHttpAuthHeadersProvider(() => {
-  // Route-level authFlowEnabled controls reauthentication/expiry UI, not credential attachment.
-  // Any same-origin API request with an existing session must carry its Bearer token.
   const session = readSession()
-  return session ? { Authorization: `Bearer ${session.accessToken}` } : undefined
+  return session ? { Authorization: `Bearer ${session.accessToken}` } : {}
 })
+setHttpSignatureCredentialsProvider(getApiSignatureCredentials)
 setHttpUnauthorizedHandler(() => {
-  if (authFlowEnabled) return reauthenticateAfterUnauthorized()
+  if (authFlowEnabled) void reauthenticateAfterUnauthorized()
 })
 setHttpAuthFailureHandler(() => {
-  if (authFlowEnabled) {
-    clearAuthSession()
-    dispatchAuthEvent(AUTH_EXPIRED_EVENT)
-  }
+  clearAuthSession()
 })
-
-export { AUTH_EXPIRED_EVENT, AUTH_FAILURE_EVENT }
