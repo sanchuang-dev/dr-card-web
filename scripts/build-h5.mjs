@@ -127,7 +127,7 @@ const apiBaseUrl =
   cloudflareBuildContext && (target.appEnvironment === 'dev' || target.appEnvironment === 'preview')
     ? ''
     : configuredApiBaseUrl
-if (target.appEnvironment === 'test' && !apiBaseUrl) {
+if (target.appEnvironment === 'test' && !apiBaseUrl && !ossWebTarget) {
   errors.push('test builds require VITE_API_BASE_URL; a production-like test bundle must target a real backend.')
 }
 if (apiBaseUrl) {
@@ -142,7 +142,7 @@ if (apiBaseUrl) {
 }
 
 const publicOrigin = readEnv('VITE_BUDDY_PUBLIC_ORIGIN')?.trim() ?? ''
-if (dataMode === 'api' && prodLike && !publicOrigin && ossWebTarget !== 'prod') {
+if (dataMode === 'api' && prodLike && !publicOrigin && !ossWebTarget) {
   errors.push(`${target.appEnvironment} API builds require VITE_BUDDY_PUBLIC_ORIGIN.`)
 }
 if (publicOrigin) {
