@@ -15,15 +15,20 @@ const AUTH_FAILURE_EVENT = 'dr-card-ui:auth-failure'
 const AUTH_EXPIRED_EVENT = 'dr-card-ui:auth-expired'
 const LOGIN_PATH = '/api/oauth/login'
 
+export interface NewUserPopup {
+  title: string
+  description: string
+  points: number | string
+}
+
 export interface AuthSession {
   userInfo: unknown
   accessToken: string
+  is_new_user?: boolean
+  popup?: NewUserPopup
 }
 
-interface LoginResponse {
-  userInfo: unknown
-  accessToken: string
-}
+interface LoginResponse extends AuthSession {}
 
 interface LoginEnvelope {
   code?: unknown
@@ -46,7 +51,8 @@ let signatureCredentials: ApiSignatureCredentials | undefined
 function readSession(): AuthSession | undefined {
   const value = storage.read(STORAGE_KEYS.authSession)
   if (value && value.accessToken.trim()) {
-    return { userInfo: volatileSession?.userInfo ?? null, accessToken: value.accessToken }
+    if (volatileSession?.accessToken === value.accessToken) return volatileSession
+    return { userInfo: null, accessToken: value.accessToken }
   }
   return volatileSession
 }
@@ -93,7 +99,20 @@ export function parseLoginResponse(result: unknown): LoginResponse {
     })
   }
 
-  return { userInfo: payload.userInfo, accessToken: payload.accessToken }
+  const popupValue = payload.popup
+  const popup = popupValue && typeof popupValue === 'object' ? popupValue as Partial<NewUserPopup> : undefined
+  const validPopup = popup && typeof popup.title === 'string' && popup.title.trim()
+    && typeof popup.description === 'string' && popup.description.trim()
+    && (typeof popup.points === 'number' || typeof popup.points === 'string')
+    ? { title: popup.title, description: popup.description, points: popup.points }
+    : undefined
+
+  return {
+    userInfo: payload.userInfo,
+    accessToken: payload.accessToken,
+    ...(typeof payload.is_new_user === 'boolean' ? { is_new_user: payload.is_new_user } : {}),
+    ...(validPopup ? { popup: validPopup } : {}),
+  }
 }
 
 async function loginFromNative(): Promise<AuthSession> {

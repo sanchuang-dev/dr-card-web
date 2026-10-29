@@ -30,7 +30,7 @@ export default function ChatMessageList({
 
   useEffect(() => {
     const list = listRef.current
-    const scroller = list?.parentElement
+    const scroller = list?.closest<HTMLElement>('[data-chat-scroll]')
     if (!scroller) return
 
     const onScroll = () => {
@@ -46,7 +46,6 @@ export default function ChatMessageList({
     if (previousHeight === 0 || followBottomRef.current) {
       scroller.scrollTop = Math.max(0, currentHeight - scroller.clientHeight)
     } else if (historyPrepended && currentHeight > previousHeight) {
-      // Preserve the reader's viewport when older history is prepended.
       scroller.scrollTop += currentHeight - previousHeight
     }
     previousScrollHeightRef.current = currentHeight

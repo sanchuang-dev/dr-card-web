@@ -12,7 +12,7 @@ Bucket `kbs-sdl`（`cn-guangzhou`）：
 | --- | --- | --- | --- |
 | `preview` | `kbs-web/ui/` | `preview` | Mock / Disabled |
 | `dev` | `kbs-web/dev/` | `dev` | 默认 Mock / Disabled |
-| `test` | `kbs-web/test/` | `test` | 真实 API / Native |
+| `test` | `kbs-web/test/` | `test` | API 模式 / Native；API 连通性单独验收 |
 | `prod` | `kbs-web/prod/last/` | `prod` | **仅构建验证，暂不接入新部署** |
 
 示例：`http://kbs.3cgroup.cn/kbs-web/ui/` 等需要公司端将 URL 精确映射到上述对象前缀，且服务器对 SPA 路由做对应目录的 fallback，不能把静态资源 404 伪装成 HTML。优先启用 HTTPS。当前属于待公司验证的**目标地址**，不能用 CI 成功代替公网真实页面验证。
@@ -21,7 +21,7 @@ Bucket `kbs-sdl`（`cn-guangzhou`）：
 
 ## GitHub 环境准备（必须由仓库/云账号管理员完成）
 
-**#171 修订**：取消 `OSS_WEB_NONPROD_ENABLED` 额外开关。非生产分支 push 后先进行无密钥包检查，通过就**真正尝试**所属环境的 OSS 上传；若对应 GitHub Environment 凭据缺失，作业明确失败并输出配置要求，**不再以 skipped 假装已部署**。仍不借用生产密钥，也不自动删除任何 OSS 文件。
+**#171 更新**：非生产推送会实际尝试上传；取消 `OSS_WEB_NONPROD_ENABLED` 开关。缺少 OSS 凭据时部署作业明确失败，不能用 CI 打包成功代替真实发布。当前可由 Repository secrets 统一提供 OSS AK；`oss-ui/dev/test` Environment 继续承载环境边界，未来如需更强 RAM 隔离，可用同名 Environment secrets 覆盖。发布脚本不做对象删除。
 
 首次执行自动部署前，在 GitHub Settings → Environments 创建：
 
@@ -29,16 +29,14 @@ Bucket `kbs-sdl`（`cn-guangzhou`）：
 - `oss-dev`：只允许 `dev` 分支；
 - `oss-test`：只允许 `test` 分支。
 
-每套环境应具有自己的最小权限发布身份，限制**只操作该环境的** `kbs-web/ui/*`、`kbs-web/dev/*` 或 `kbs-web/test/*`。不得复用拥有 `kbs-web/prod/*` 写/删权限的生产密钥。
+当前可以使用 Repository-level OSS 凭据完成非生产固定目录发布；代码仍强制 `preview→ui`、`dev→dev`、`test→test`，且不执行删除。若后续需要云侧最小权限隔离，再为三个 Environment 配置同名、仅限各自前缀的 RAM 凭据即可，无需改变工作流。
 
-| GitHub Environment 参数 | 类型 | 要求 |
+| GitHub 参数 | 类型 | 要求 |
 | --- | --- | --- |
-| `OSS_ACCESS_KEY_ID` | Secret | 仅该环境拥有写/读所属前缀权限 |
-| `OSS_ACCESS_KEY_SECRET` | Secret | 对应密钥，不进入源代码、`VITE_*` 或公开日志 |
-| `OSS_API_BASE_URL` | Variable | `test` 必须填写真实测试后端 HTTPS API；ui/dev 按需 |
-| `OSS_PUBLIC_ORIGIN` | Variable | `test` 必须填写真实有效 HTTPS Origin，用于搭子邀请；ui/dev 按需 |
+| `OSS_ACCESS_KEY_ID` | Repository 或 Environment Secret | OSS 写/读凭据；Environment 同名值可覆盖仓库级值 |
+| `OSS_ACCESS_KEY_SECRET` | Repository 或 Environment Secret | 对应密钥，不进入源代码、`VITE_*` 或公开日志 |
 
-未正确配置时，部署作业**明确失败**；不借用 `oss-production`，不伪装成功，不隐式使用示例 API。项目原有 `Build` 与 CF 部署工作流继续保留。
+缺少 OSS 凭据时部署作业**明确失败**。测试 API / 邀请 Origin 不再作为静态包上传前置：固定目录可以先落 OSS 并完成人工页面验证，`build-meta.json` 会如实记录 API / Origin 是否配置；真实业务连通性继续在 #171 单独验收。项目原有 `Build` 与 CF 部署工作流继续保留。
 
 ## CI / 发布流程
 
