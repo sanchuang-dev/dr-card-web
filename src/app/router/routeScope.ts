@@ -181,5 +181,5 @@ export function isNativeReferenceRoute(route: RouteMeta | undefined): route is R
 
 /** Exact tab match: child/detail routes do not display the bottom navigation. */
 export function isFormalH5TabPath(pathname: string): boolean {
-  return FORMAL_H5_TAB_ROUTES.some((route) => route.path === pathname)
+  return FORMAL_H5_TAB_ROUTES.some((route) => route.path === (pathname === '/index.html' ? '/' : pathname))
 }
