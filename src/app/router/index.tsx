@@ -94,6 +94,7 @@ import { ROUTES } from './routes'
 import type { RouteMeta } from './routes'
 import type { ReactElement } from 'react'
 import HomeAuthGate from '../auth/HomeAuthGate'
+import { entryRedirectLoader } from './entryRedirect'
 
 /**
  * H022 shared route implementations.
@@ -277,8 +278,10 @@ export const router = createBrowserRouter([
         else if (route.implementationKey) element = sharedRouteImplementations[route.implementationKey](route)
         else if (customPages[route.path]) element = customPages[route.path]
         else if (route.boundary === 'webview') element = <WebViewBoundary />
-        return { path: route.path, element }
+        return { path: route.path, ...(route.path === '/' ? { loader: entryRedirectLoader } : {}), element }
       }),
+      // OSS static index.html is a valid document URL and shares the Home route.
+      { path: '/index.html', loader: entryRedirectLoader, element: customPages['/'] },
       /* T002 品牌 Token 展示页（工程参照页，不属于业务节点，不进入业务导航） */
       { path: '/tokens', element: <Tokens /> },
       { path: '/draw-success', element: <Navigate to="/luck/result" replace /> },

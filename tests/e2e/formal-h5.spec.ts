@@ -345,3 +345,37 @@ test('@formal-h5 H023 shared empty-state visual is stable across data pages', as
 
   expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([])
 })
+
+test('@formal-h5 OSS index redirect enters the target without mounting Home', async ({ page }) => {
+  await page.addInitScript(() => {
+    const observed = window as Window & { __homeEverRendered?: boolean; __entryHistoryLength?: number }
+    observed.__homeEverRendered = false
+    observed.__entryHistoryLength = history.length
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('[data-dearseed-avatar]')) observed.__homeEverRendered = true
+    })
+    observer.observe(document, { childList: true, subtree: true })
+  })
+
+  await page.goto('/index.html?redirect=%2Fservice%2Fchat%2Fhuman', { waitUntil: 'domcontentloaded' })
+  await expect(page).toHaveURL(/\/service\/chat\/human$/)
+  await expect(page.locator('[data-h5-route-active="true"]')).toBeVisible()
+  await expect(page.locator('[data-dearseed-avatar]')).toHaveCount(0)
+  expect(await page.evaluate(() => (window as Window & { __homeEverRendered?: boolean }).__homeEverRendered)).toBe(false)
+  expect(await page.evaluate(() => history.length)).toBe(
+    await page.evaluate(() => (window as Window & { __entryHistoryLength?: number }).__entryHistoryLength),
+  )
+})
+
+test('@formal-h5 explicit OSS index without redirect remains on its entry document', async ({ page }) => {
+  await page.goto('/index.html', { waitUntil: 'domcontentloaded' })
+  await expect(page).toHaveURL(/\/index\.html$/)
+  await expect(page.locator('[data-dearseed-avatar]')).toBeVisible()
+  await expect(page.locator('[data-title-bar]')).toContainText('极地种子品牌专栏')
+})
+
+test('@formal-h5 invalid OSS redirect does not leave the app', async ({ page }) => {
+  await page.goto('/index.html?redirect=https%3A%2F%2Fevil.example', { waitUntil: 'domcontentloaded' })
+  await expect(page).toHaveURL(/\/index\.html\?redirect=/)
+  await expect(page.locator('[data-dearseed-avatar]')).toBeVisible()
+})
