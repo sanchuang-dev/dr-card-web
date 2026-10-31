@@ -1,12 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { RouterProvider } from 'react-router-dom'
 import { router } from './app/router'
+import { initialEntryRedirect } from './app/router/entryRedirect'
 import NewcomerDialog from './components/mobile/NewcomerDialog'
 import { getAuthSession, type NewUserPopup } from './services/auth/session'
 
 export default function App() {
   const [newUserPopup, setNewUserPopup] = useState<NewUserPopup | null>(null)
   const popupHandledThisDocument = useRef(false)
+  // Hide the new-user popup only until the initial router replace is resolved.
+  const routerInitialized = useSyncExternalStore(router.subscribe, () => router.state.initialized)
+  const entryRedirectPending = initialEntryRedirect !== null && !routerInitialized
 
   useEffect(() => {
     const handleSessionChanged = () => {
@@ -31,7 +35,7 @@ export default function App() {
   return (
     <>
       <RouterProvider router={router} />
-      <NewcomerDialog open={newUserPopup !== null} title={newUserPopup?.title ?? ''}
+      <NewcomerDialog open={newUserPopup !== null && !entryRedirectPending} title={newUserPopup?.title ?? ''}
         description={newUserPopup?.description ?? ''} points={newUserPopup?.points ?? ''}
         onComplete={dismissPopup} onDismiss={dismissPopup} />
     </>
