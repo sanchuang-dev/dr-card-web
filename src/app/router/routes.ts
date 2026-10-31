@@ -1199,12 +1199,13 @@ export function isTabPath(pathname: string): boolean {
 
 /** 精确匹配；无则尝试 `:param` 动态路由匹配 */
 export function findRouteByPathname(pathname: string): RouteMeta | undefined {
-  const exact = ROUTES.find((route) => route.path === pathname)
+  const normalizedPath = pathname === '/index.html' ? '/' : pathname
+  const exact = ROUTES.find((route) => route.path === normalizedPath)
   if (exact) return exact
   return ROUTES.find((route) => {
     if (!route.path.includes(':')) return false
     const segs = route.path.split('/')
-    const parts = pathname.split('/')
+    const parts = normalizedPath.split('/')
     if (segs.length !== parts.length) return false
     return segs.every((seg, i) => seg.startsWith(':') || seg === parts[i])
   })
