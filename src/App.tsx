@@ -32,7 +32,7 @@ export default function App() {
   return (
     <>
       <RouterProvider router={router} />
-       <NewcomerDialog open={newUserPopup !== null && initialEntryRedirect === null} title={newUserPopup?.title ?? ''}
+      <NewcomerDialog open={newUserPopup !== null && initialEntryRedirect === null} title={newUserPopup?.title ?? ''}
         description={newUserPopup?.description ?? ''} points={newUserPopup?.points ?? ''}
         onComplete={dismissPopup} onDismiss={dismissPopup} />
     </>

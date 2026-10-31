@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { waitFor } from '@testing-library/react'
+import { createMemoryRouter } from 'react-router-dom'
 import { entryRedirectLoader, resolveEntryRedirect } from './entryRedirect'
 import type { LoaderFunctionArgs } from 'react-router-dom'
 
@@ -38,4 +40,27 @@ describe('OSS index.html redirect entry', () => {
       expect(entryRedirectLoader({ request, params: {}, context: {} } as LoaderFunctionArgs)).toBeNull()
     }
   })
+
+  it.each(['/kbs-web/dev', '/kbs-web/test', '/kbs-web/prod/last'])(
+    'honors an OSS router basename (%s) on initial replace',
+    async (basename) => {
+      const router = createMemoryRouter([
+        { path: '/index.html', loader: entryRedirectLoader },
+        { path: '/service/chat/human', element: null },
+      ], {
+        basename,
+        initialEntries: [
+          basename + '/index.html?redirect=%2Fservice%2Fchat%2Fhuman',
+        ],
+      })
+      try {
+        await waitFor(() => {
+          expect(router.state.location.pathname).toBe(basename + '/service/chat/human')
+          expect(router.state.errors).toBeNull()
+        })
+      } finally {
+        router.dispose()
+      }
+    },
+  )
 })
