@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { RouterProvider } from 'react-router-dom'
 import { router } from './app/router'
+import { initialEntryRedirect } from './app/router/entryRedirect'
 import NewcomerDialog from './components/mobile/NewcomerDialog'
 import { getAuthSession, type NewUserPopup } from './services/auth/session'
 
@@ -31,7 +32,7 @@ export default function App() {
   return (
     <>
       <RouterProvider router={router} />
-      <NewcomerDialog open={newUserPopup !== null} title={newUserPopup?.title ?? ''}
+       <NewcomerDialog open={newUserPopup !== null && initialEntryRedirect === null} title={newUserPopup?.title ?? ''}
         description={newUserPopup?.description ?? ''} points={newUserPopup?.points ?? ''}
         onComplete={dismissPopup} onDismiss={dismissPopup} />
     </>
