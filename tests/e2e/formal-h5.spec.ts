@@ -489,16 +489,17 @@ test('@formal-h5 direct OSS redirect back closes the host when no H5 route histo
 })
 
 test('@formal-h5 H5 back uses the previous route before requesting host close', async ({ page }) => {
-  await page.goto('/service/chat', { waitUntil: 'domcontentloaded' })
+  await page.goto('/profile', { waitUntil: 'domcontentloaded' })
   await expectHealthyFormalRoute(page)
-  await page.locator('[data-chat-human-entry]').click()
-  await expect(page.locator('[data-human-stage]')).toHaveAttribute('data-human-stage', 'queuing')
+  await page.getByRole('button', { name: '通知' }).click()
+  await expect(page).toHaveURL(/\/notifications$/)
+  await expectHealthyFormalRoute(page)
   expect(await page.evaluate(() => (history.state as { idx?: number } | null)?.idx ?? 0)).toBeGreaterThan(0)
 
   await page.getByRole('button', { name: '返回' }).click()
 
-  await expect(page).toHaveURL(/\/service\/chat$/)
-  await expect(page.locator('[data-chat-human-entry]')).toBeVisible()
+  await expect(page).toHaveURL(/\/profile$/)
+  await expectHealthyFormalRoute(page)
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
 
