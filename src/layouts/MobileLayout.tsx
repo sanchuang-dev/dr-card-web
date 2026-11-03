@@ -123,6 +123,8 @@ export default function MobileLayout() {
   const { open: openOverlay } = useOverlay()
   const [authExpired, setAuthExpired] = useState(false)
   const [backFeedback, setBackFeedback] = useState<string | null>(null)
+  // Do not initialize the cross-origin mall until the user first enters its tab.
+  const [mallActivated, setMallActivated] = useState(() => location.pathname === '/mall')
   const authExpiredHandledRef = useRef(false)
   const showLegacyNav = isLegacyTabPath(location.pathname)
   const showNav = showLegacyNav || isFormalH5TabPath(location.pathname)
@@ -189,6 +191,10 @@ export default function MobileLayout() {
 
   useLayoutEffect(() => {
     previousShellPathname.current = location.pathname
+  }, [location.pathname])
+
+  useLayoutEffect(() => {
+    if (location.pathname === '/mall') setMallActivated(true)
   }, [location.pathname])
 
   if (fixtureRedirect) {
@@ -309,14 +315,21 @@ export default function MobileLayout() {
             <H5ScrollRestoration previousPathname={scrollSourcePathname} />
           )}
           <H5RouteOutlet />
-          {/* Keep the iframe alive across tab changes; only hide its wrapper when another route is active. */}
-          <div
-            className={location.pathname === '/mall' ? 'absolute inset-0 z-10 bg-background' : 'hidden'}
-            data-h5-route-active={location.pathname === '/mall' ? 'true' : 'false'}
-            aria-hidden={location.pathname !== '/mall'}
-          >
-            <MallWebView />
-          </div>
+          {/* Mount on first entry while visible, then preserve the iframe's layout viewport off-tab. */}
+          {mallActivated && (
+            <div
+              className={
+                location.pathname === '/mall'
+                  ? 'absolute inset-0 z-10 bg-background'
+                  : 'invisible pointer-events-none absolute inset-0 z-0'
+              }
+              data-mall-shell="true"
+              data-h5-route-active={location.pathname === '/mall' ? 'true' : 'false'}
+              aria-hidden={location.pathname !== '/mall'}
+            >
+              <MallWebView />
+            </div>
+          )}
         </div>
         {showNav && <BottomNav variant={showLegacyNav ? 'legacy' : 'main'} />}
       </div>
