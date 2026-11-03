@@ -42,6 +42,7 @@ function showShell(initialPath: string) {
         { path: 'points', element: <p>泡泡值</p> },
         { path: 'dearseed', element: <p>诗得丽</p> },
         { path: 'notifications', element: <p>消息列表</p> },
+        { path: 'mall', element: <p>商城路由 Outlet 不应重复渲染</p> },
       ],
     },
   ], { initialEntries: [initialPath] })
@@ -75,5 +76,33 @@ describe('member-center unread badge lifecycle', () => {
     await act(async () => { await router.navigate('/notifications') })
     await act(async () => { await router.navigate('/profile') })
     expect(mocks.refresh).toHaveBeenCalledTimes(2)
+  })
+})
+
+
+describe('mall iframe lifecycle', () => {
+  it('does not mount the mall before first entry and reuses the iframe after leaving the tab', async () => {
+    const router = showShell('/')
+    expect(screen.queryByTitle('卡博士商城')).toBeNull()
+
+    await act(async () => { await router.navigate('/mall') })
+    const iframe = screen.getByTitle('卡博士商城')
+    const mallShell = iframe.closest('[data-mall-shell]')
+    expect(mallShell).not.toBeNull()
+    expect(mallShell?.classList.contains('invisible')).toBe(false)
+
+    await act(async () => { await router.navigate('/points') })
+    expect(screen.getByTitle('卡博士商城')).toBe(iframe)
+    expect(mallShell?.classList.contains('invisible')).toBe(true)
+    expect(mallShell?.classList.contains('pointer-events-none')).toBe(true)
+
+    await act(async () => { await router.navigate('/mall') })
+    expect(screen.getByTitle('卡博士商城')).toBe(iframe)
+    expect(mallShell?.classList.contains('invisible')).toBe(false)
+  })
+
+  it('mounts the mall immediately when /mall is the initial route', () => {
+    showShell('/mall')
+    expect(screen.getByTitle('卡博士商城')).toBeTruthy()
   })
 })

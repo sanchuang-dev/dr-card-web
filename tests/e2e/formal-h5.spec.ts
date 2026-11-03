@@ -15,15 +15,16 @@ function routeUrl(path: string) {
   return path === '/' ? '/?newcomer=off' : path
 }
 
-async function stubMallIframes(page: Page) {
+async function stubMallIframes(page: Page, onRequest?: (url: string, resourceType: string) => void) {
   for (const origin of ['https://kbs-shop.3cgroup.cn', 'https://kbs-shop2.3cgroup.cn']) {
-    await page.route(`${origin}/**`, (route) =>
-      route.fulfill({
+    await page.route(`${origin}/**`, async (route) => {
+      onRequest?.(route.request().url(), route.request().resourceType())
+      await route.fulfill({
         status: 200,
         contentType: 'text/html',
         body: '<!doctype html><html><body>商城 E2E stub</body></html>',
-      }),
-    )
+      })
+    })
   }
 }
 
@@ -132,6 +133,49 @@ test('@formal-h5 first-level tab uses CSS fade without root snapshot', async ({ 
   const routeFrame = page.locator('[data-h5-route-active="true"]')
   await expect(routeFrame).toHaveAttribute('data-h5-route-transition', 'tab')
   await expectHealthyFormalRoute(page)
+
+  expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([])
+})
+
+test('@formal-h5 mall iframe mounts on first entry and is reused across tab changes', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page)
+  let mallDocumentRequests = 0
+  await stubMallIframes(page, (url, resourceType) => {
+    if (resourceType === 'document' && url.startsWith('https://kbs-shop.3cgroup.cn/')) {
+      mallDocumentRequests += 1
+    }
+  })
+
+  await page.goto('/?newcomer=off', { waitUntil: 'domcontentloaded' })
+  await expectHealthyFormalRoute(page)
+
+  const mallShell = page.locator('[data-mall-shell]')
+  const mallIframe = page.locator('iframe[title="卡博士商城"]')
+  await expect(mallIframe).toHaveCount(0)
+  expect(mallDocumentRequests).toBe(0)
+
+  await page.getByRole('button', { name: '商城' }).click()
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/mall')
+  await expect(mallShell).toBeVisible()
+  await expect(mallIframe).toHaveCount(1)
+  await expect.poll(() => mallDocumentRequests).toBe(1)
+
+  const firstLayout = await mallShell.boundingBox()
+  expect(firstLayout?.width ?? 0).toBeGreaterThan(0)
+  expect(firstLayout?.height ?? 0).toBeGreaterThan(0)
+  await mallIframe.evaluate((node) => node.setAttribute('data-e2e-instance', 'first'))
+
+  await page.getByRole('button', { name: '首页' }).click()
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/')
+  await expect(mallShell).toBeHidden()
+  await expect(mallShell).toHaveClass(/pointer-events-none/)
+  await expect(mallIframe).toHaveCount(1)
+
+  await page.getByRole('button', { name: '商城' }).click()
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/mall')
+  await expect(mallShell).toBeVisible()
+  await expect(mallIframe).toHaveAttribute('data-e2e-instance', 'first')
+  expect(mallDocumentRequests).toBe(1)
 
   expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([])
 })
