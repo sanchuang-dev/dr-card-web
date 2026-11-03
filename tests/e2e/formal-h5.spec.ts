@@ -15,10 +15,10 @@ function routeUrl(path: string) {
   return path === '/' ? '/?newcomer=off' : path
 }
 
-async function stubMallIframes(page: Page, onRequest?: (url: string) => void) {
+async function stubMallIframes(page: Page, onRequest?: (url: string, resourceType: string) => void) {
   for (const origin of ['https://kbs-shop.3cgroup.cn', 'https://kbs-shop2.3cgroup.cn']) {
     await page.route(`${origin}/**`, async (route) => {
-      onRequest?.(route.request().url())
+      onRequest?.(route.request().url(), route.request().resourceType())
       await route.fulfill({
         status: 200,
         contentType: 'text/html',
@@ -140,8 +140,10 @@ test('@formal-h5 first-level tab uses CSS fade without root snapshot', async ({ 
 test('@formal-h5 mall iframe mounts on first entry and is reused across tab changes', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page)
   let mallDocumentRequests = 0
-  await stubMallIframes(page, (url) => {
-    if (url.startsWith('https://kbs-shop.3cgroup.cn/')) mallDocumentRequests += 1
+  await stubMallIframes(page, (url, resourceType) => {
+    if (resourceType === 'document' && url.startsWith('https://kbs-shop.3cgroup.cn/')) {
+      mallDocumentRequests += 1
+    }
   })
 
   await page.goto('/?newcomer=off', { waitUntil: 'domcontentloaded' })
@@ -175,7 +177,7 @@ test('@formal-h5 mall iframe mounts on first entry and is reused across tab chan
   await expect(mallIframe).toHaveAttribute('data-e2e-instance', 'first')
   expect(mallDocumentRequests).toBe(1)
 
-  expect(runtimeErrors, runtimeErrors.join('\\n')).toEqual([])
+  expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([])
 })
 
 test('@formal-h5 @business profile notification navigation remains inside formal H5', async ({ page }) => {
