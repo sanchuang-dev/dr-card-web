@@ -19,7 +19,8 @@ import { protectedFixtureRedirect, useOverlay } from '../app/fixtures/useFixture
 import H5ScrollRestoration from '../components/mobile/H5ScrollRestoration'
 import MallWebView from '../pages/MallWebView'
 import Toast from '../components/ui/Toast'
-import { closeWebView } from '../services/nativeBridge'
+import { closeWebView, NativeBridgeError } from '../services/nativeBridge'
+import { hasPreviousRouterEntry } from '../app/router/history'
 import { AUTH_EXPIRED_EVENT, AUTH_FAILURE_EVENT, setAuthFlowEnabled } from '../services/auth/session'
 
 type H5RouteTransitionKind = 'none' | 'tab' | 'forward' | 'back'
@@ -121,6 +122,7 @@ export default function MobileLayout() {
   const { unreadCount, countLoaded } = useNotifications()
   const { open: openOverlay } = useOverlay()
   const [authExpired, setAuthExpired] = useState(false)
+  const [backFeedback, setBackFeedback] = useState<string | null>(null)
   const authExpiredHandledRef = useRef(false)
   const showLegacyNav = isLegacyTabPath(location.pathname)
   const showNav = showLegacyNav || isFormalH5TabPath(location.pathname)
@@ -152,6 +154,12 @@ export default function MobileLayout() {
       setAuthFlowEnabled(false)
     }
   }, [activeFormalH5, navigate])
+
+  useEffect(() => {
+    if (!backFeedback) return
+    const timeoutId = window.setTimeout(() => setBackFeedback(null), 2600)
+    return () => window.clearTimeout(timeoutId)
+  }, [backFeedback])
 
   const fixtureRedirect = activeFormalH5 ? protectedFixtureRedirect(location) : null
   const titleBarMode = route?.titleBar ?? 'back'
@@ -194,6 +202,30 @@ export default function MobileLayout() {
       return
     }
     navigate(target)
+  }
+
+  const handleActiveFormalH5Back = () => {
+    // React Router's BrowserHistory `idx` counts H5-managed entries. The initial OSS loader
+    // replace leaves it at zero; only a real previous H5 route should receive navigate(-1).
+    if (hasPreviousRouterEntry(window.history.state)) {
+      navigate(-1)
+      return
+    }
+
+    void closeWebView().catch((error: unknown) => {
+      console.error('[h5-shell-back]', error)
+      if (error instanceof NativeBridgeError) {
+        if (error.code === 'bridge-disabled') {
+          setBackFeedback('当前环境未启用原生关闭能力')
+        } else if (error.code === 'bridge-unsupported' || error.code === 'capability-unsupported') {
+          setBackFeedback('当前 App 版本暂不支持关闭页面')
+        } else {
+          setBackFeedback('关闭页面失败，请稍后重试')
+        }
+        return
+      }
+      setBackFeedback('关闭页面失败，请稍后重试')
+    })
   }
 
   const openMarkAllRead = () => {
@@ -247,6 +279,11 @@ export default function MobileLayout() {
           <Toast message="用户信息过期" />
         </div>
       )}
+      {backFeedback && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-24 z-[101] flex justify-center px-6">
+          <Toast message={backFeedback} status="danger" />
+        </div>
+      )}
       <div className="app-background flex h-screen supports-[height:100dvh]:h-dvh flex-col overflow-hidden pt-[env(safe-area-inset-top)] text-text-primary">
         {/* T013R7：min-w-0 防止 TitleBar 第三列 action 被撑大撑出页面右侧 */}
         <div className="min-w-0 shrink-0">
@@ -254,7 +291,13 @@ export default function MobileLayout() {
             <TitleBar
               title={title}
               leadingAction={leadingAction}
-              onBack={route?.backTo ? () => navigateShell(route.backTo as string) : undefined}
+              onBack={
+                route?.backTo
+                  ? () => navigateShell(route.backTo as string)
+                  : activeFormalH5
+                    ? handleActiveFormalH5Back
+                    : undefined
+              }
               action={titleAction}
               actionWide={isNotificationsPage}
               fullWidth={activeFormalH5}
