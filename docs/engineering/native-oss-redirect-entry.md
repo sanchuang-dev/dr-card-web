@@ -17,3 +17,10 @@
 - `test/prod` 的 Native WebView 宿主门禁在 Router 启动之前执行，不会被参数绕过。
 - Router 跳转后地址为 Browser History 真实业务路径，页面刷新、进程恢复重新请求深层路径时，仍要求 CDN/网关按环境配置 SPA rewrite（见 #80/#171）；原生每次新开 WebView 应使用静态入口 URL。
 - 入口跳转只保证 H5 路由可达，不代表人工客服的真实 Socket/API 已完成业务验收。
+
+## 返回语义
+
+- 从一个 H5 页面进入另一个 H5 页面时，React Router 管理的 `history.state.idx` 大于零，标题栏返回执行 `navigate(-1)`，回到上一条 H5 路由。
+- 从 Native 静态入口直接通过 `index.html?redirect=...` 进入目标页时，初始 loader 使用 replace，不产生上一条 H5 路由（`idx === 0`）；标题栏返回调用正式 `closeWebView()` capability，关闭当前 WebView 容器。
+- 不使用 `window.history.length` 判断 H5 历史，因为它统计浏览器文档历史，不等同 React Router 管理的路由历史。
+- `closeWebView` 的 H5 adapter / fail-closed 行为由 H030 定义。Native App 只有实际注入对应平台方法后才能关闭；方法缺失或 Bridge 不可用时，H5 明确提示，不静默无响应。

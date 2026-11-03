@@ -470,6 +470,37 @@ test('@formal-h5 OSS index redirect enters the target without mounting Home', as
   expect(await page.evaluate(() => history.length)).toBe(
     await page.evaluate(() => (window as Window & { __entryHistoryLength?: number }).__entryHistoryLength),
   )
+  expect(await page.evaluate(() => (history.state as { idx?: number } | null)?.idx)).toBe(0)
+})
+
+
+test('@formal-h5 direct OSS redirect back closes the host when no H5 route history exists', async ({ page }) => {
+  await page.goto('/index.html?redirect=%2Fservice%2Fchat%2Fhuman', { waitUntil: 'domcontentloaded' })
+  await expect(page).toHaveURL(/\/service\/chat\/human$/)
+  expect(await page.evaluate(() => (history.state as { idx?: number } | null)?.idx)).toBe(0)
+
+  await page.getByRole('button', { name: '返回' }).click()
+
+  // Preview deliberately has no Native bridge. The close branch must fail visibly rather than
+  // navigating to Home or silently trying to pop a nonexistent H5 route.
+  await expect(page.getByRole('alert')).toHaveText('当前环境未启用原生关闭能力')
+  await expect(page).toHaveURL(/\/service\/chat\/human$/)
+  await expect(page.locator('[data-dearseed-avatar]')).toHaveCount(0)
+})
+
+test('@formal-h5 H5 back uses the previous route before requesting host close', async ({ page }) => {
+  await page.goto('/profile', { waitUntil: 'domcontentloaded' })
+  await expectHealthyFormalRoute(page)
+  await page.getByRole('button', { name: '通知' }).click()
+  await expect(page).toHaveURL(/\/notifications$/)
+  await expectHealthyFormalRoute(page)
+  expect(await page.evaluate(() => (history.state as { idx?: number } | null)?.idx ?? 0)).toBeGreaterThan(0)
+
+  await page.getByRole('button', { name: '返回' }).click()
+
+  await expect(page).toHaveURL(/\/profile$/)
+  await expectHealthyFormalRoute(page)
+  await expect(page.getByRole('alert')).toHaveCount(0)
 })
 
 test('@formal-h5 explicit OSS index without redirect remains on its entry document', async ({ page }) => {
