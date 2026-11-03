@@ -36,7 +36,7 @@ Bucket `kbs-sdl`（`cn-guangzhou`）：
 | `OSS_ACCESS_KEY_ID` | Repository 或 Environment Secret | OSS 写/读凭据；Environment 同名值可覆盖仓库级值 |
 | `OSS_ACCESS_KEY_SECRET` | Repository 或 Environment Secret | 对应密钥，不进入源代码、`VITE_*` 或公开日志 |
 
-缺少 OSS 凭据时部署作业**明确失败**。测试 API / 邀请 Origin 不再作为静态包上传前置：固定目录可以先落 OSS 并完成人工页面验证，`build-meta.json` 会如实记录 API / Origin 是否配置；真实业务连通性继续在 #171 单独验收。项目原有 `Build` 与 CF 部署工作流继续保留。
+缺少 OSS 凭据时部署作业**明确失败**。测试 API 根地址与真实业务连通性仍是单独验收项；但洗头搭子二维码公开 Origin 是 API/test/prod 构建的必需配置。test 默认从 `.env.test` 读取 `https://kbs.3cgroup.cn`，非空的项目级 `OSS_PUBLIC_ORIGIN` 可覆盖；缺失或不合法时构建失败，不能发布一个无法生成真实二维码的包。`build-meta.json` 继续记录 API / Origin 配置状态。项目原有 `Build` 与 CF 部署工作流继续保留。
 
 ## CI / 发布流程
 
@@ -50,6 +50,9 @@ Bucket `kbs-sdl`（`cn-guangzhou`）：
 6. 公司域名的 TLS、代理、API/Bridge 及前缀可访问性必须在实际测试中确认。
 
 ## 边界与待确认项目
+
+- 洗头搭子二维码当前编码官方 Origin 根路径 `/buddy/invite/scan`。仅验证 `/kbs-web/test/` 静态入口可访问，不代表该二维码路径可达；公司网关仍需将根路径邀请入口正确路由到测试 H5 引导页，并保留 `code` 查询参数。该公网路由映射属于 #80/#171 外部验收，不由本次构建配置代替。
+
 
 - **本卡未重写生产流程**：现有 `oss-production.yml` 仍写旧不可变版本目录；#169/#170 联合接入并完成安全门禁前不得切换 `prod/last`。
 - 现有 Cloudflare 构建及站点仍按原配置运行。

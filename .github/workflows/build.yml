@@ -194,20 +194,25 @@ jobs:
       - name: Build test bundle
         env:
           VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
-          # CI build fixture; actual Pages deployments must configure their own official origin.
-          VITE_BUDDY_PUBLIC_ORIGIN: https://test.dr-card-ui.pages.dev
+          # Optional project-level override; an empty value falls back to .env.test.
+          VITE_BUDDY_PUBLIC_ORIGIN: ${{ vars.OSS_PUBLIC_ORIGIN }}
         run: npm run build:test
 
       - name: Verify test build identity
         run: |
-          node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('dist/build-meta.json','utf8'));if(m.appEnvironment!=='test'||m.dataMode!=='api'||m.bridgeMode!=='native'||m.apiBaseConfigured!==true)process.exit(1)"
+          node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('dist/build-meta.json','utf8'));if(m.appEnvironment!=='test'||m.dataMode!=='api'||m.bridgeMode!=='native'||m.apiBaseConfigured!==true||m.buddyPublicOriginConfigured!==true)process.exit(1)"
+          node -e "const fs=require('fs');const files=fs.readdirSync('dist/assets').filter(x=>x.endsWith('.js'));if(!files.some(x=>fs.readFileSync('dist/assets/'+x,'utf8').includes('https://kbs.3cgroup.cn')))process.exit(1)"
           test ! -f dist/mockServiceWorker.js
 
       - name: Reject Mock in production-like builds
         shell: bash
         run: |
-          if VITE_API_BASE_URL=http://example.invalid VITE_BUDDY_PUBLIC_ORIGIN='' node scripts/build-h5.mjs test --dry-run; then
-            echo 'test accepted an absent official Buddy QR origin.'
+          if VITE_API_BASE_URL=http://example.invalid VITE_BUDDY_PUBLIC_ORIGIN=http://insecure.example node scripts/build-h5.mjs test --dry-run; then
+            echo 'test accepted a non-HTTPS official Buddy QR origin.'
+            exit 1
+          fi
+          if H5_OSS_ARTIFACT=1 OSS_WEB_TARGET=test VITE_API_BASE_URL=http://example.invalid VITE_BUDDY_PUBLIC_ORIGIN=http://insecure.example node scripts/build-h5.mjs test --dry-run; then
+            echo 'test OSS accepted a non-HTTPS official Buddy QR origin.'
             exit 1
           fi
           if VITE_DATA_MODE=mock node scripts/build-h5.mjs test --dry-run; then
@@ -281,7 +286,7 @@ jobs:
       VITE_APP_ENV: test
       VITE_DATA_MODE: api
       VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
-      VITE_BUDDY_PUBLIC_ORIGIN: https://test.dr-card-ui.pages.dev
+      VITE_BUDDY_PUBLIC_ORIGIN: ${{ vars.OSS_PUBLIC_ORIGIN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -308,7 +313,8 @@ jobs:
 
       - name: Verify test bundle identity
         run: |
-          node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('dist/build-meta.json','utf8'));if(m.appEnvironment!=='test'||m.dataMode!=='api'||m.bridgeMode!=='native'||m.apiBaseConfigured!==true)process.exit(1)"
+          node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('dist/build-meta.json','utf8'));if(m.appEnvironment!=='test'||m.dataMode!=='api'||m.bridgeMode!=='native'||m.apiBaseConfigured!==true||m.buddyPublicOriginConfigured!==true)process.exit(1)"
+          node -e "const fs=require('fs');const files=fs.readdirSync('dist/assets').filter(x=>x.endsWith('.js'));if(!files.some(x=>fs.readFileSync('dist/assets/'+x,'utf8').includes('https://kbs.3cgroup.cn')))process.exit(1)"
 
       - name: Verify test bundle has no Mock Service Worker asset
         shell: bash

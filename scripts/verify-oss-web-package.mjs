@@ -19,11 +19,12 @@ if (meta.appEnvironment !== allowed[target] ||
   throw new Error(`OSS package build identity mismatch for ${target}`)
 }
 if (target === 'test' || target === 'prod') {
-  // API/origin readiness is business acceptance, not a prerequisite for
-  // uploading a fixed-path test/prod bundle for human verification.
+  // API connectivity is a separate acceptance item, but Buddy QR rendering
+  // requires a configured official public origin in every API/test/prod bundle.
   if (meta.dataMode !== 'api' || meta.bridgeMode !== 'native' ||
+      !meta.buddyPublicOriginConfigured ||
       existsSync(join(root, 'mockServiceWorker.js'))) {
-    throw new Error('Formal H5 cannot ship Mock or invalid Native bridge')
+    throw new Error('Formal H5 requires API mode, Native bridge, and an official Buddy QR origin')
   }
 } else if (meta.dataMode !== 'mock' || !existsSync(join(root, 'mockServiceWorker.js'))) {
   throw new Error('UI/development fixture bundle must preserve its Mock worker')

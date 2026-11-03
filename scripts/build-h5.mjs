@@ -141,8 +141,9 @@ if (apiBaseUrl) {
   }
 }
 
-const publicOrigin = readEnv('VITE_BUDDY_PUBLIC_ORIGIN')?.trim() ?? ''
-if (dataMode === 'api' && prodLike && !publicOrigin && !ossWebTarget) {
+const publicOrigin =
+  process.env.VITE_BUDDY_PUBLIC_ORIGIN?.trim() || fileEnv.VITE_BUDDY_PUBLIC_ORIGIN?.trim() || ''
+if (dataMode === 'api' && prodLike && !publicOrigin) {
   errors.push(`${target.appEnvironment} API builds require VITE_BUDDY_PUBLIC_ORIGIN.`)
 }
 if (publicOrigin) {
