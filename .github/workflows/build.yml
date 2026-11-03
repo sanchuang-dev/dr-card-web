@@ -111,7 +111,7 @@ jobs:
           grep -F '"dataMode":"mock"' /tmp/cf-auto-build.txt
           grep -F '"apiBaseConfigured":false' /tmp/cf-auto-build.txt
 
-          CF_PAGES_BRANCH=test CF_PAGES_COMMIT_SHA="$GITHUB_SHA" VITE_API_BASE_URL=http://example.invalid VITE_BUDDY_PUBLIC_ORIGIN=https://test.dr-card-ui.pages.dev node scripts/build-h5.mjs cf --dry-run | tee /tmp/cf-test-build.txt
+          CF_PAGES_BRANCH=test CF_PAGES_COMMIT_SHA="$GITHUB_SHA" VITE_API_BASE_URL=http://example.invalid VITE_BUDDY_PUBLIC_ORIGIN=https://kbs.3cgroup.cn node scripts/build-h5.mjs cf --dry-run | tee /tmp/cf-test-build.txt
           grep -F '"appEnvironment":"test"' /tmp/cf-test-build.txt
           grep -F '"dataMode":"api"' /tmp/cf-test-build.txt
           grep -F '"bridgeMode":"native"' /tmp/cf-test-build.txt
