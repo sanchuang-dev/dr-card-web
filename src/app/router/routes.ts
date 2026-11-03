@@ -1199,6 +1199,7 @@ export function isTabPath(pathname: string): boolean {
 
 /** 精确匹配；无则尝试 `:param` 动态路由匹配 */
 export function findRouteByPathname(pathname: string): RouteMeta | undefined {
+  // OSS's explicit static document shares the same route metadata as the home entry.
   const normalizedPath = pathname === '/index.html' ? '/' : pathname
   const exact = ROUTES.find((route) => route.path === normalizedPath)
   if (exact) return exact
