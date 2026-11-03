@@ -280,7 +280,7 @@ export const router = createBrowserRouter([
         else if (route.boundary === 'webview') element = <WebViewBoundary />
         return { path: route.path, ...(route.path === '/' ? { loader: entryRedirectLoader } : {}), element }
       }),
-      // OSS static index.html is a valid document URL and shares the Home route.
+      // Explicit OSS index.html is a real object URL; keep the home route identical without a redirect parameter.
       { path: '/index.html', loader: entryRedirectLoader, element: customPages['/'] },
       /* T002 品牌 Token 展示页（工程参照页，不属于业务节点，不进入业务导航） */
       { path: '/tokens', element: <Tokens /> },

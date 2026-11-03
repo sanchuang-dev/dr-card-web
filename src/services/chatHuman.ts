@@ -27,13 +27,13 @@ export function connectChatSocket(token: string, callbacks: ChatSocketEvents): C
   // Keep it separate from path, which configures the Engine.IO transport endpoint.
   const socket: Socket = io(`${runtimePolicy.socketBaseUrl ?? new URL(base).origin}${CHAT_SOCKET_NAMESPACE}`, {
     path: runtimePolicy.socketPath ?? '/socket.io',
-    auth: { token },
+    auth: { token: `Bearer ${token}` },
     autoConnect: false,
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 10_000,
     timeout: 8000,
-    // No token in URL/query; backend authenticates socket.handshake.auth.token
+    // No token in URL/query; backend authenticates socket.handshake.auth.token; value uses the same Bearer scheme as HTTP APIs
   })
   let ended = false
   let connectedBefore = false

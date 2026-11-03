@@ -88,10 +88,9 @@ jobs:
       OSS_ENDPOINT: https://oss-cn-guangzhou.aliyuncs.com
       OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
       OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-      # Vite must receive the test Environment Variables at package build time.
-      # Missing values still allow artifact upload but are not API-ready.
+      # The test Buddy QR origin is read from the checked-in .env.test file.
+      # Do not inject an empty OSS_PUBLIC_ORIGIN variable over that mode config.
       VITE_API_BASE_URL: ${{ vars.OSS_API_BASE_URL }}
-      VITE_BUDDY_PUBLIC_ORIGIN: ${{ vars.OSS_PUBLIC_ORIGIN }}
       OSS_WEB_TARGET: ${{ github.ref_name == 'preview' && 'ui' || github.ref_name }}
       H5_OSS_ARTIFACT: '1'
     steps:
@@ -119,6 +118,9 @@ jobs:
           if [[ "$mode" == "ui" ]]; then mode=preview; fi
           node scripts/build-h5.mjs "$mode"
           node scripts/verify-oss-web-package.mjs "$OSS_WEB_TARGET"
+          if [[ "$OSS_WEB_TARGET" == "test" ]]; then
+            node -e "const fs=require('fs');const files=fs.readdirSync('dist/assets').filter(x=>x.endsWith('.js'));if(!files.some(x=>fs.readFileSync('dist/assets/'+x,'utf8').includes('https://kbs.3cgroup.cn')))process.exit(1)"
+          fi
           test ! "$OSS_WEB_TARGET" = "prod"
       - name: Install official ossutil (pinned SHA256)
         shell: bash

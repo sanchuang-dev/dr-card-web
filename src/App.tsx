@@ -8,8 +8,13 @@ import { getAuthSession, type NewUserPopup } from './services/auth/session'
 export default function App() {
   const [newUserPopup, setNewUserPopup] = useState<NewUserPopup | null>(null)
   const popupHandledThisDocument = useRef(false)
-  // Hide the new-user popup only until the initial router replace is resolved.
-  const routerInitialized = useSyncExternalStore(router.subscribe, () => router.state.initialized)
+
+  // Hide the new-user dialog only while React Router resolves the initial
+  // deep-link loader. Once resolved, preserve its existing global behavior.
+  const routerInitialized = useSyncExternalStore(
+    router.subscribe,
+    () => router.state.initialized,
+  )
   const entryRedirectPending = initialEntryRedirect !== null && !routerInitialized
 
   useEffect(() => {
