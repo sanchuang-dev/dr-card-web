@@ -3,10 +3,10 @@ import { RouterProvider } from 'react-router-dom'
 import { router } from './app/router'
 import { initialEntryRedirect } from './app/router/entryRedirect'
 import NewcomerDialog from './components/mobile/NewcomerDialog'
-import { getAuthSession, type NewUserPopup } from './services/auth/session'
+import { getAuthSession, getNewUserPopup } from './services/auth/session'
 
 export default function App() {
-  const [newUserPopup, setNewUserPopup] = useState<NewUserPopup | null>(null)
+  const [newUserPopup, setNewUserPopup] = useState<ReturnType<typeof getNewUserPopup>>(null)
   const popupHandledThisDocument = useRef(false)
 
   // Hide the new-user dialog only while React Router resolves the initial
@@ -19,8 +19,8 @@ export default function App() {
 
   useEffect(() => {
     const handleSessionChanged = () => {
-      const session = getAuthSession()
-      if (session?.is_new_user !== true || !session.popup) {
+      const popup = getNewUserPopup(getAuthSession())
+      if (!popup) {
         setNewUserPopup(null)
         return
       }
@@ -28,7 +28,7 @@ export default function App() {
       // during this page lifetime; do not add unconfirmed persistent storage keys.
       if (popupHandledThisDocument.current) return
       popupHandledThisDocument.current = true
-      setNewUserPopup(session.popup)
+      setNewUserPopup(popup)
     }
 
     window.addEventListener('dr-card-ui:auth-session-changed', handleSessionChanged)
@@ -40,9 +40,9 @@ export default function App() {
   return (
     <>
       <RouterProvider router={router} />
-      <NewcomerDialog open={newUserPopup !== null && !entryRedirectPending} title={newUserPopup?.title ?? ''}
-        description={newUserPopup?.description ?? ''} points={newUserPopup?.points ?? ''}
-        onComplete={dismissPopup} onDismiss={dismissPopup} />
+      <NewcomerDialog open={newUserPopup !== null && !entryRedirectPending}
+        title={newUserPopup?.title ?? ''} description={newUserPopup?.description ?? ''}
+        points={newUserPopup?.points} onComplete={dismissPopup} onDismiss={dismissPopup} />
     </>
   )
 }
