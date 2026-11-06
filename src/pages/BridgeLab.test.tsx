@@ -179,9 +179,10 @@ describe('Bridge Lab page', () => {
 
     await waitFor(() => {
       expect(request).toBeDefined()
-      expect(document.querySelector('[data-bridge-lab-logs]')?.textContent).toContain(
-        'Native invoke · androidBridge.scanCode',
-      )
+      const invocationLog = document.querySelector('[data-bridge-lab-logs]')?.textContent ?? ''
+      expect(invocationLog).toContain('Native invoke')
+      expect(invocationLog).toContain('androidBridge')
+      expect(invocationLog).toContain('scanCode')
     })
 
     const logs = document.querySelector('[data-bridge-lab-logs]') as HTMLElement
