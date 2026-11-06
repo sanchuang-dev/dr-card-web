@@ -12,19 +12,37 @@ import {
 const AUTH_FAILURE_EVENT = 'dr-card-ui:auth-failure'
 const LOGIN_PATH = '/api/oauth/login'
 
+export interface NewUserPopup {
+  title: string
+  description: string
+  points?: number | string
+}
+
 export interface AuthSession {
   userInfo: unknown
   accessToken: string
+  is_new_user?: boolean
+  popup?: NewUserPopup
 }
 
-interface LoginResponse {
-  userInfo: unknown
-  accessToken: string
-}
+interface LoginResponse extends AuthSession {}
 
 interface LoginEnvelope {
   code?: unknown
   data?: unknown
+  is_new_user?: unknown
+  popup?: unknown
+}
+
+const DEFAULT_NEW_USER_POPUP: NewUserPopup = {
+  title: '欢迎加入卡博士',
+  description: '恭喜成为卡博士新用户，欢迎开启卡博士体验。',
+}
+
+/** Build a visible first-entry notice from the new-user flag, even without optional popup copy. */
+export function getNewUserPopup(session: AuthSession | undefined): NewUserPopup | null {
+  if (session?.is_new_user !== true) return null
+  return session.popup ?? DEFAULT_NEW_USER_POPUP
 }
 
 const loginClient = createHttpClient({
@@ -86,7 +104,36 @@ export function parseLoginResponse(result: unknown): LoginResponse {
     })
   }
 
-  return { userInfo: payload.userInfo, accessToken: payload.accessToken }
+  // Gateways may leave extension fields outside data while wrapping login credentials.
+  const isNewUser = typeof payload.is_new_user === 'boolean'
+    ? payload.is_new_user
+    : response.is_new_user
+  const popupValue = payload.popup ?? response.popup
+  const popup = popupValue && typeof popupValue === 'object' ? popupValue as Partial<NewUserPopup> : undefined
+  const hasPopupContent = Boolean(
+    (typeof popup?.title === 'string' && popup.title.trim()) ||
+    (typeof popup?.description === 'string' && popup.description.trim()) ||
+    typeof popup?.points === 'number' ||
+    typeof popup?.points === 'string',
+  )
+  const validPopup = hasPopupContent
+    ? {
+        title: typeof popup?.title === 'string' && popup.title.trim() ? popup.title : DEFAULT_NEW_USER_POPUP.title,
+        description: typeof popup?.description === 'string' && popup.description.trim()
+          ? popup.description
+          : DEFAULT_NEW_USER_POPUP.description,
+        ...(typeof popup?.points === 'number' || typeof popup?.points === 'string'
+          ? { points: popup.points }
+          : {}),
+      }
+    : undefined
+
+  return {
+    userInfo: payload.userInfo,
+    accessToken: payload.accessToken,
+    ...(typeof isNewUser === 'boolean' ? { is_new_user: isNewUser } : {}),
+    ...(validPopup ? { popup: validPopup } : {}),
+  }
 }
 
 async function loginFromNative(): Promise<AuthSession> {
