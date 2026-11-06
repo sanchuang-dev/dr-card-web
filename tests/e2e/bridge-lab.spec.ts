@@ -59,6 +59,46 @@ test.describe('H027 Bridge Lab', () => {
     await expect(logs).toContainText('"success": true')
   })
 
+  test('shows correlated Android scan callback stages without exposing QR text by default', async ({ page }) => {
+    await page.addInitScript(() => {
+      const host = window as unknown as {
+        androidBridge?: { scanCode(payload: unknown): void }
+        androidBridgeCallback?: (callbackId: string, payload: unknown) => void
+      }
+      host.androidBridge = {
+        scanCode(payload) {
+          const request = JSON.parse(payload as string) as { callbackId: string }
+          setTimeout(() => {
+            host.androidBridgeCallback?.(request.callbackId, {
+              code: 0,
+              message: 'ok',
+              data: { text: 'e2e-buddy-qr-private', scanType: 'qr' },
+            })
+          }, 0)
+          setTimeout(() => {
+            host.androidBridgeCallback?.(request.callbackId, {
+              code: 0,
+              message: 'ok',
+              data: { text: 'e2e-buddy-qr-private', scanType: 'qr' },
+            })
+          }, 20)
+        },
+      }
+    })
+
+    await page.goto('/__debug/bridge-lab?osType=android', { waitUntil: 'domcontentloaded' })
+    await page.locator('[data-capability-name="scanCode"]').click()
+    await page.getByRole('button', { name: '调用 scanCode' }).click()
+
+    const logs = page.locator('[data-bridge-lab-logs]')
+    await expect(logs).toContainText('Native invoke · androidBridge.scanCode')
+    await expect(logs).toContainText('androidBridgeCallback')
+    await expect(logs).toContainText('intermediate')
+    await expect(logs).toContainText('terminal')
+    await expect(logs).toContainText('[REDACTED]')
+    await expect(logs).not.toContainText('e2e-buddy-qr-private')
+  })
+
   test('Native can still call the legacy window.testFunc endpoint', async ({ page }) => {
     await page.goto('/__debug/bridge-lab?osType=android', { waitUntil: 'domcontentloaded' })
 
