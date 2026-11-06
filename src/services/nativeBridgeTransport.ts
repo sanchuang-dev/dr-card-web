@@ -211,6 +211,59 @@ export type InjectedCallbackName =
   | 'nativeBridgeCallback'
   | 'androidBridgeCallback'
 
+export type NativeBridgeTransportDebugEvent =
+  | {
+      type: 'request'
+      objectName: string
+      methodName: string
+      callbackId: string
+      callbackNames: readonly InjectedCallbackName[]
+      timeoutMs: number
+      args: readonly unknown[]
+    }
+  | {
+      type: 'callback'
+      objectName?: string
+      methodName?: string
+      callbackId: string
+      callbackName: InjectedCallbackName | null
+      source: 'callback' | 'method-return'
+      callbackCount?: number
+      pendingMatched: boolean
+      terminal?: boolean
+      classificationError?: string
+      payload: unknown
+    }
+  | {
+      type: 'timeout'
+      objectName: string
+      methodName: string
+      callbackId: string
+      timeoutMs: number
+    }
+
+type NativeBridgeTransportDebugListener = (event: NativeBridgeTransportDebugEvent) => void
+const nativeBridgeTransportDebugListeners = new Set<NativeBridgeTransportDebugListener>()
+
+/** Passive Bridge Lab observer. No events are built when no debug listener is mounted. */
+export function subscribeNativeBridgeTransportDebugEvents(
+  listener: NativeBridgeTransportDebugListener,
+): () => void {
+  nativeBridgeTransportDebugListeners.add(listener)
+  return () => nativeBridgeTransportDebugListeners.delete(listener)
+}
+
+function emitNativeBridgeTransportDebugEvent(event: NativeBridgeTransportDebugEvent): void {
+  if (nativeBridgeTransportDebugListeners.size === 0) return
+  for (const listener of nativeBridgeTransportDebugListeners) {
+    try {
+      listener(event)
+    } catch {
+      // Diagnostics must never interfere with Native callback delivery or Promise settlement.
+    }
+  }
+}
+
 export interface CallbackInjectedObjectTransportConfig<TInput, TResult>
   extends Omit<InjectedObjectTransportConfig<TInput, TResult>, 'serializeArgs'> {
   serializeArgs: (input: TInput, callbackId: string) => readonly unknown[]
@@ -232,7 +285,7 @@ export interface CallbackInjectedObjectTransportConfig<TInput, TResult>
 }
 
 type InjectedCallbackPending = {
-  handle: (payload: unknown) => void
+  handle: (payload: unknown, callbackName: InjectedCallbackName) => void
 }
 
 type InjectedCallbackDispatcher = (callbackId: string, payload: unknown) => void
@@ -265,9 +318,17 @@ function installInjectedCallbackEndpoint(
     dispatcher = (callbackId, payload) => {
       const request = channel.pending.get(callbackId)
       if (request) {
-        request.handle(payload)
+        request.handle(payload, callbackName)
         return
       }
+      emitNativeBridgeTransportDebugEvent({
+        type: 'callback',
+        callbackId,
+        callbackName,
+        source: 'callback',
+        pendingMatched: false,
+        payload,
+      })
       channel.fallbacks.get(callbackName)?.call(hostWindow, callbackId, payload)
     }
     channel.dispatchers.set(callbackName, dispatcher)
@@ -348,6 +409,7 @@ export function createCallbackInjectedObjectTransport<TInput, TResult>(
           }
 
           const callbackName = config.callbackName ?? 'nativeBridgeCallback'
+          const callbackNames = [...new Set([callbackName, ...(config.callbackAliases ?? [])])]
           const channel = getInjectedCallbackChannel(
             hostWindow,
             callbackName,
@@ -377,13 +439,29 @@ export function createCallbackInjectedObjectTransport<TInput, TResult>(
               cleanup()
               work()
             }
-            const handlePayload = (payload: unknown) => {
+            const handlePayload = (
+              payload: unknown,
+              source: 'callback' | 'method-return',
+              endpoint: InjectedCallbackName | null,
+            ) => {
               callbackCount += 1
 
               let isTerminal = true
               try {
                 isTerminal = config.isTerminalPayload?.(payload, callbackCount) ?? true
               } catch (error) {
+                emitNativeBridgeTransportDebugEvent({
+                  type: 'callback',
+                  objectName: config.objectName,
+                  methodName: config.methodName,
+                  callbackId,
+                  callbackName: endpoint,
+                  source,
+                  callbackCount,
+                  pendingMatched: true,
+                  classificationError: error instanceof Error ? error.message : String(error),
+                  payload,
+                })
                 finish(() =>
                   reject(
                     error instanceof NativeTransportError
@@ -398,6 +476,19 @@ export function createCallbackInjectedObjectTransport<TInput, TResult>(
                 return
               }
 
+              emitNativeBridgeTransportDebugEvent({
+                type: 'callback',
+                objectName: config.objectName,
+                methodName: config.methodName,
+                callbackId,
+                callbackName: endpoint,
+                source,
+                callbackCount,
+                pendingMatched: true,
+                terminal: isTerminal,
+                payload,
+              })
+
               if (!isTerminal) return
 
               finish(() => {
@@ -409,8 +500,17 @@ export function createCallbackInjectedObjectTransport<TInput, TResult>(
               })
             }
 
-            channel.pending.set(callbackId, { handle: handlePayload })
+            channel.pending.set(callbackId, {
+              handle: (payload, endpoint) => handlePayload(payload, 'callback', endpoint),
+            })
             const timer = window.setTimeout(() => {
+              emitNativeBridgeTransportDebugEvent({
+                type: 'timeout',
+                objectName: config.objectName,
+                methodName: config.methodName,
+                callbackId,
+                timeoutMs,
+              })
               finish(() =>
                 reject(
                   new NativeTransportError(
@@ -423,8 +523,17 @@ export function createCallbackInjectedObjectTransport<TInput, TResult>(
 
             try {
               const args = config.serializeArgs(input, callbackId)
+              emitNativeBridgeTransportDebugEvent({
+                type: 'request',
+                objectName: config.objectName,
+                methodName: config.methodName,
+                callbackId,
+                callbackNames,
+                timeoutMs,
+                args,
+              })
               const rawResult = method.call(bridge, ...args)
-              if (rawResult !== undefined) handlePayload(rawResult)
+              if (rawResult !== undefined) handlePayload(rawResult, 'method-return', null)
             } catch (error) {
               finish(() =>
                 reject(

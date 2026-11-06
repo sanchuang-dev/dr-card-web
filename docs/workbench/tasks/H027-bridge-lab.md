@@ -12,6 +12,7 @@
 - Android / iOS 宿主协议可通过隔离的 Raw Probe 临时探测；
 - 不为每个新增 Native 方法继续手写一套固定按钮；
 - 调试信息可观察，但敏感返回默认脱敏；
+- 异步 Native callback 可按 callbackId 追踪实际入口、回调次数、中间态/终态与超时；扫码原文默认脱敏；
 - Lab 只服务 dev / preview / test 联调，不进入 production 正式业务导航或 production bundle。
 
 ## 当前事实
@@ -28,6 +29,14 @@
 - 从当前 production capability registry 生成 Lab 能力清单；
 - 已确认的 capability 通过同一 production runtime/facade 链调用；
 - 浏览器或宿主缺失时明确显示 unsupported，不 fake success。
+
+### Async callback trace
+
+- 记录 Native 方法实际调用、object/method、callbackId、候选 callback endpoints 与安全的参数摘要；
+- 记录每次 Native callback 实际抵达的 endpoint、callbackId 是否命中 pending、回调次数、payload 类型及 capability 阶段判定；
+- 记录 callback timeout；未匹配 callbackId 也要可见，并继续保持既有 fallback 行为；
+- callback observer 仅在 Bridge Lab 挂载时订阅；没有 observer 时 transport 不分配诊断事件；
+- 扫码 payload 保留 envelope 状态字段用于诊断，但默认遮蔽二维码正文；显式 reveal 仍受现有调试动作控制。
 
 ### Android Raw Probe
 
@@ -74,6 +83,7 @@
 - iOS Raw Probe 复用 H026 transport，并按 callback name 持久化 single-flight channel 状态；
 - timeout 后 channel 保持 fail-closed，显式 reset 才恢复；
 - Lab 日志记录开始、耗时、结果与错误，并默认脱敏；
+- Registered async callback 增加被动诊断事件：Native 调用、callbackId、实际回调入口、回调计数、阶段判定、未匹配回调与超时；扫码正文默认遮蔽；
 - production 使用编译期 route gate + lazy import，CI 额外扫描 dist，避免 Bridge Lab / Raw Probe 落入 production bundle；
 - 新增 Vitest / React component / Playwright browser smoke 覆盖。
 
@@ -87,6 +97,7 @@
 - [x] 敏感返回默认脱敏，raw 查看需要显式动作；
 - [x] 普通浏览器无宿主对象时明确 unsupported；
 - [x] Lab 不进入 production 正式业务导航，并由 bundle gate 验证；
+- [ ] Registered async callback trace 可关联 request / callbackId / 实际 endpoint / callback 次数 / intermediate-terminal / timeout；扫码正文默认脱敏；
 - [ ] 当前 App WebView 对本轮 Lab 再跑一次真人 smoke：registered `getLoginToken` + 至少一次 Android Raw Probe；
 - [ ] 用户验收后才标记 Accepted。
 

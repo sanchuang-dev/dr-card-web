@@ -179,3 +179,30 @@ H027 Bridge Lab 因此保持两层：
 - iOS Raw Probe：仍保留旧 `getAuthorizationInfo + onToken` 预设，用于旧 App build / 历史协议诊断。
 
 该更新不删除 H026 messageHandler transport；它只改变当前 production auth protocol 的事实来源。
+
+## 11. Async callback observability
+
+Bridge Lab subscribes to a passive diagnostic stream emitted by the existing injected-object callback transport. The stream does not create a second callback channel and does not alter request settlement.
+
+Each registered async invocation can be inspected through:
+
+- Native object and method actually invoked;
+- generated callbackId and callback endpoints configured for the request;
+- safe argument shape summary (JSON keys plus callbackId / scanType only; arbitrary string contents are not copied into logs);
+- actual callback endpoint used by Native;
+- callbackId pending match / unmatched status;
+- callback count and capability-specific intermediate / terminal classification;
+- callback payload type and timeout.
+
+Privacy boundary:
+
+- scan callback envelope metadata such as numeric Native code, message and scanType remain visible for diagnosis;
+- scanned QR text (including a legacy top-level string `code`) is masked in the default log view;
+- explicit reveal remains a user action and exposes only the in-memory current log item;
+- unknown / unmatched callbacks are fully masked because their originating capability cannot be established;
+- the observer is subscribed only while Bridge Lab is mounted; with no subscribers, the transport skips diagnostic event construction;
+- listener exceptions are isolated and cannot interrupt Native callback dispatch or Promise settlement.
+
+The added automated tests cover request correlation, both Android callback aliases, callback counts and stage classification, unmatched callbacks, timeout events, component log rendering and Playwright browser smoke.
+
+**Validation boundary:** these tests use stub Native hosts and prove the H5 diagnostic mechanism only. They do not prove that the current App build emits a callback, that the real Native callbackId matches, or that Android/iOS scan business flows work. A real App WebView scan is still required after the change reaches the test environment.
