@@ -200,7 +200,7 @@ Privacy boundary:
 - scanned QR text (including a legacy top-level string `code`) is masked in the default log view;
 - explicit reveal remains a user action and exposes only the in-memory current log item;
 - unknown / unmatched callbacks are fully masked because their originating capability cannot be established;
-- the observer is subscribed only while Bridge Lab is mounted; with no subscribers, the transport skips diagnostic event construction;
+- the observer is subscribed only while Bridge Lab is mounted; with no subscribers, diagnostic events are not delivered or retained;
 - listener exceptions are isolated and cannot interrupt Native callback dispatch or Promise settlement.
 
 The added automated tests cover request correlation, both Android callback aliases, callback counts and stage classification, unmatched callbacks, timeout events, component log rendering and Playwright browser smoke.

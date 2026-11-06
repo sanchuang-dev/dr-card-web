@@ -245,7 +245,7 @@ export type NativeBridgeTransportDebugEvent =
 type NativeBridgeTransportDebugListener = (event: NativeBridgeTransportDebugEvent) => void
 const nativeBridgeTransportDebugListeners = new Set<NativeBridgeTransportDebugListener>()
 
-/** Passive Bridge Lab observer. No events are built when no debug listener is mounted. */
+/** Passive Bridge Lab observer. Events are delivered only to active debug listeners. */
 export function subscribeNativeBridgeTransportDebugEvents(
   listener: NativeBridgeTransportDebugListener,
 ): () => void {

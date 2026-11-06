@@ -35,7 +35,7 @@
 - 记录 Native 方法实际调用、object/method、callbackId、候选 callback endpoints 与安全的参数摘要；
 - 记录每次 Native callback 实际抵达的 endpoint、callbackId 是否命中 pending、回调次数、payload 类型及 capability 阶段判定；
 - 记录 callback timeout；未匹配 callbackId 也要可见，并继续保持既有 fallback 行为；
-- callback observer 仅在 Bridge Lab 挂载时订阅；没有 observer 时 transport 不分配诊断事件；
+- callback observer 仅在 Bridge Lab 挂载时订阅；没有 observer 时 transport 不向订阅者分发或保留诊断事件；
 - 扫码 payload 保留 envelope 状态字段用于诊断，但默认遮蔽二维码正文；显式 reveal 仍受现有调试动作控制。
 
 ### Android Raw Probe
