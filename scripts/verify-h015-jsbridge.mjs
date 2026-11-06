@@ -42,6 +42,8 @@ function collectFormalH5PageFiles(directory, pageRoot = path.normalize('src/page
     }
 
     if (!/\.[jt]sx?$/.test(entry.name)) return []
+    // Test fixtures exercise fake Native globals; only shipped page modules are subject to H015.
+    if (/\.test\.[jt]sx?$/.test(entry.name)) return []
     if (path.normalize(directory) === pageRoot && NATIVE_REFERENCE_TOP_LEVEL_PAGES.has(entry.name)) {
       return []
     }
