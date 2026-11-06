@@ -164,6 +164,56 @@ describe('Bridge Lab page', () => {
     expect(screen.queryByText(/bridge-lab-scan/)).toBeNull()
   })
 
+  it('shows scan callback correlation, actual endpoint, both stages, and redacts the QR text', async () => {
+    usePlatform('android')
+    let request: { scanType: string; callbackId: string } | undefined
+    labWindow.androidBridge = {
+      scanCode(payload: unknown) {
+        request = JSON.parse(payload as string) as { scanType: string; callbackId: string }
+      },
+    }
+
+    render(<BridgeLab />)
+    fireEvent.click(document.querySelector('[data-capability-name="scanCode"]') as HTMLButtonElement)
+    fireEvent.click(screen.getByRole('button', { name: '调用 scanCode' }))
+
+    await waitFor(() => {
+      expect(request).toBeDefined()
+      const invocationLog = document.querySelector('[data-bridge-lab-logs]')?.textContent ?? ''
+      expect(invocationLog).toContain('Native invoke')
+      expect(invocationLog).toContain('androidBridge')
+      expect(invocationLog).toContain('scanCode')
+    })
+
+    const logs = document.querySelector('[data-bridge-lab-logs]') as HTMLElement
+    expect(logs.textContent).toContain(request!.callbackId)
+    expect(logs.textContent).toContain('"scanType": "all"')
+    expect(logs.textContent).toContain('window.nativeBridgeCallback')
+    expect(logs.textContent).toContain('window.androidBridgeCallback')
+
+    labWindow.androidBridgeCallback?.(request!.callbackId, {
+      code: 0,
+      message: 'ok',
+      data: { text: 'buddy-qr-private-value', scanType: 'qr' },
+    })
+
+    await waitFor(() => expect(logs.textContent).toContain('intermediate'))
+    expect(logs.textContent).toContain('"text": "[REDACTED]"')
+    expect(logs.textContent).not.toContain('buddy-qr-private-value')
+
+    labWindow.androidBridgeCallback?.(request!.callbackId, {
+      code: 0,
+      message: 'ok',
+      data: { text: 'buddy-qr-private-value', scanType: 'qr' },
+    })
+
+    await waitFor(() => {
+      expect(logs.textContent).toContain('terminal')
+      expect(logs.textContent).toContain('callbackCount')
+    })
+    expect(logs.textContent).not.toContain('buddy-qr-private-value')
+  })
+
   it('can invoke a registered H032 capability with editable JSON input', async () => {
     usePlatform('android')
     labWindow.androidBridge = {
