@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { runtimePolicy } from '../app/config/runtime'
 import { validateBuddyQrUrl } from './buddyQr'
-import { fetchBackendBuddyList } from './buddyBackend'
+import { fetchBackendBuddyList, fetchUserByIdentifyCode } from './buddyBackend'
+import { fetchUserProfile } from './userProfile'
 
 /**
  * #107 H5-only contract. #105 Backend and #110 Native have not signed their APIs:
@@ -19,7 +20,7 @@ const previewSchema = z.object({
   inviter: memberSchema,
   relationship: z.enum(['available', 'self', 'already-buddies', 'unavailable']),
 })
-export type BuddyPreview = z.infer<typeof previewSchema> & { demo: boolean }
+export type BuddyPreview = z.infer<typeof previewSchema> & { demo: boolean; confirmationAvailable?: boolean }
 export type BuddyPreviewStatus = BuddyPreview['relationship']
 
 const acceptSchema = z.object({
@@ -63,6 +64,22 @@ export function readBuddyScanNavigation(value: unknown): string | null {
     raw.length > 0 && raw.length <= 2048 ? raw : null
 }
 
+/** QR recognition is always a complete, trusted HTTPS URL, never a naked UUID or an external query-driven action. */
+export function parseBuddyInviteCode(raw: string, trustedOrigin: string): string {
+  try {
+    validateBuddyQrUrl(raw, trustedOrigin)
+    const url = new URL(raw)
+    const values = url.searchParams.getAll('code')
+    if ([...url.searchParams.keys()].length !== 1 || values.length !== 1 ||
+        !z.string().uuid().safeParse(values[0]).success) {
+      throw new Error('unsupported QR parameters')
+    }
+    return values[0]!
+  } catch {
+    throw new BuddyRelationsError('invalid-code')
+  }
+}
+
 function checkQr(raw: string, adapter?: BuddyRelationsBackend): boolean {
   // Reject obviously malformed QR data before the backend is wired. A well-formed
   // QR still requires #105's authenticated server verification, not a client-side guess.
@@ -91,6 +108,29 @@ export async function previewBuddyQr(
   raw: string,
   adapter: BuddyRelationsBackend | null = signedBackend,
 ): Promise<BuddyPreview> {
+  // #107 independent H5 slice: existing authenticated read-only backend endpoints.
+  // Relation creation stays blocked until #105 provides its dedicated authorized QR acceptance.
+  if (!adapter && runtimePolicy.dataMode === 'api') {
+    const origin = import.meta.env.VITE_BUDDY_PUBLIC_ORIGIN
+    if (!origin?.trim()) throw new BuddyRelationsError('not-configured')
+    const code = parseBuddyInviteCode(raw, origin)
+    try {
+      const [inviter, profile, relations] = await Promise.all([
+        fetchUserByIdentifyCode(code),
+        fetchUserProfile(),
+        fetchBackendBuddyList(),
+      ])
+      const relationship: BuddyPreviewStatus = profile.identifyCode === code
+        ? 'self'
+        : relations.items.some(member => member.id === inviter.id)
+          ? 'already-buddies'
+          : 'available'
+      return { inviter, relationship, demo: false, confirmationAvailable: false }
+    } catch (error) {
+      if (error instanceof BuddyRelationsError) throw error
+      throw new BuddyRelationsError('request-failed')
+    }
+  }
   const demo = checkQr(raw, adapter ?? undefined)
   if (demo) return {
     inviter: { id: 'demo-buddy-inviter', nickname: '演示搭子', avatarUrl: null },
