@@ -24,7 +24,7 @@ type ViewState =
 /**
  * #107: consumes ONLY an in-App, route-state QR recognition result; never the public
  * /buddy/invite/scan URL. #110 Native must preserve existing device/card redemption.
- * API/test/prod have no signed #105 adapter yet and fail closed.
+ * API/test/prod may preview the actual UUID owner, but QR relation writes remain blocked until #105.
  */
 export default function BuddyAccept() {
   const location = useLocation()
@@ -106,7 +106,9 @@ export default function BuddyAccept() {
           : relationship === 'self' ? '自己的二维码无法用于成为搭子'
             : relationship === 'unavailable' ? '请确认二维码仍可使用'
               : preview?.demo ? '演示用户，仅验证确认交互，不会绑定真实账号'
-                : '确认后你们将成为洗头搭子'
+                : preview?.confirmationAvailable === false
+                  ? '已识别真实邀请人；后台尚未开放二维码确认，暂不能建立搭子关系'
+                  : '确认后你们将成为洗头搭子'
 
   return (
     <>
@@ -138,7 +140,7 @@ export default function BuddyAccept() {
         {actionError && <p role="alert" className="mt-2 text-sm text-danger-text">{actionError}</p>}
         {view.kind === 'ready' && relationship === 'available' && (
           <Button size="large" leadingIcon={UserRoundCheck} loading={sending}
-            disabled={sending} className="mt-5 w-full rounded-full" onClick={() => void confirm()}>
+            disabled={sending || preview?.confirmationAvailable === false} className="mt-5 w-full rounded-full" onClick={() => void confirm()}>
             {preview?.demo ? '演示确认（不真实绑定）' : '确认成为搭子'}
           </Button>
         )}

@@ -251,6 +251,14 @@ const bridgeLabRoutes =
             return { Component }
           },
         },
+        {
+          // Non-production test-only H5 probe; not a Native protocol or public binding URL.
+          path: '/__debug/buddy-qr',
+          lazy: async () => {
+            const { default: Component } = await import('../../pages/BuddyQrProbe')
+            return { Component }
+          },
+        },
       ]
 
 // OSS artifacts are mounted at /h5/releases/<sha>/<run>/, whereas normal H5

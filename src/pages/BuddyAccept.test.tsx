@@ -81,6 +81,21 @@ describe('H5 scan invite confirmation', () => {
     expect(mocks.accept).not.toHaveBeenCalled()
   })
 
+  it('shows the real inviter but disables unsupported QR relationship creation', async () => {
+    mocks.mode = 'api'
+    mocks.preview.mockResolvedValue({
+      inviter: { id: '9', nickname: '真实邀请人', avatarUrl: null },
+      relationship: 'available',
+      demo: false,
+      confirmationAvailable: false,
+    })
+    mount({ source: 'native-buddy-recognition', raw: 'https://kbs.3cgroup.cn/buddy/invite/scan?code=550e8400-e29b-41d4-a716-446655440000' })
+    await waitFor(() => expect(screen.getByText(/真实邀请人邀请你成为洗头搭子/)).toBeTruthy())
+    expect(screen.getByText(/后台尚未开放二维码确认/)).toBeTruthy()
+    expect((screen.getByRole('button', { name: '确认成为搭子' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(mocks.accept).not.toHaveBeenCalled()
+  })
+
   it('does not expose a fake acceptance in API mode without a native recognition result', async () => {
     mocks.mode = 'api'
     mount()
