@@ -1,21 +1,13 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { ScanLine } from 'lucide-react'
 import HostCloseButton from '../components/mobile/HostCloseButton'
 import {
   getNativeBridgeDiagnostics,
-  getNativeHost,
   NativeBridgeError,
   scanCode,
 } from '../services/nativeBridge'
 
-export interface ScanVerifyNavigationState {
-  nativeScanCode: string
-  nativeVerifyResult?: 'done'
-}
-
 export default function ScanVerify() {
-  const navigate = useNavigate()
   const [supported, setSupported] = useState(
     () => getNativeBridgeDiagnostics().capabilities.scanCode,
   )
@@ -47,25 +39,20 @@ export default function ScanVerify() {
     setError(null)
 
     try {
-      const host = getNativeHost()
       const result = await scanCode({ scanType: 'qr' })
 
-      if (host === 'android') {
-        const state: ScanVerifyNavigationState = {
-          nativeScanCode: result.code,
-          nativeVerifyResult: 'done',
-        }
-        // H037 has Android evidence that scanCode resolves only after the device transaction
-        // completes, so H5 resumes directly at the completed result state.
-        navigate('/card/verify/confirm', { replace: true, state })
-        return
+      if (
+        result.isDevice === true ||
+        (typeof result.consumeUse === 'string' && result.consumeUse.length > 0)
+      ) {
+        setError('已识别设备二维码，请按 App 设备页面提示操作')
+      } else if (result.isDevice === false) {
+        // H5 仓库和已读后台合同没有定义可验证的卡券二维码格式；不把任意非设备码当核销码。
+        setError('暂不支持此卡券核销码，未发起核销')
+      } else {
+        // use=17 的 Native 回调只有 text / scanType；缺少业务类型时不伪造核销成功。
+        setError('当前扫码结果无法验证为卡券核销码，未发起核销')
       }
-
-      // iOS still has only the retained one-callback scanner contract in H5 evidence. Until Native
-      // terminal transaction semantics are independently confirmed, preserve the existing
-      // confirmation flow and never label a scan recognition as completed verification.
-      const state: ScanVerifyNavigationState = { nativeScanCode: result.code }
-      navigate('/card/verify/confirm', { state })
     } catch (error) {
       if (error instanceof NativeBridgeError) {
         if (error.code === 'native-cancelled') {
@@ -78,6 +65,7 @@ export default function ScanVerify() {
       } else {
         setError('扫码失败，请重试')
       }
+    } finally {
       setScanning(false)
     }
   }
@@ -86,7 +74,7 @@ export default function ScanVerify() {
     ? '当前 App 版本暂不支持扫码'
     : scanning
       ? '正在调用系统扫码…'
-      : error ?? '将二维码对准扫描框，点击开始扫码'
+      : error ?? '将卡券二维码对准扫描框，点击开始扫码'
 
   return (
     <div className="relative min-h-full bg-black text-white">
@@ -124,7 +112,7 @@ export default function ScanVerify() {
         <div className="relative z-10 mt-10 text-center">
           <p className="text-lg font-semibold">请将二维码对准扫描框</p>
           <p className="mt-1 text-sm text-white/60">
-            {supported ? '扫码后请按页面提示完成设备操作' : '请升级到支持扫码能力的 App 版本'}
+            {supported ? '扫码后先校验二维码类型；未识别的码不会执行核销' : '请升级到支持扫码能力的 App 版本'}
           </p>
         </div>
       </main>

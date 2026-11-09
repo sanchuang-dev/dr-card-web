@@ -2,25 +2,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 const mocks = vi.hoisted(() => ({
-  navigate: vi.fn(),
   scanCode: vi.fn(),
   getNativeBridgeDiagnostics: vi.fn(),
-  getNativeHost: vi.fn(),
   closeWebView: vi.fn(() => Promise.resolve()),
 }))
 
-vi.mock('react-router-dom', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react-router-dom')>()
-  return {
-    ...actual,
-    useNavigate: () => mocks.navigate,
-  }
-})
-
 vi.mock('../services/nativeBridge', () => {
   class NativeBridgeError extends Error {
-    constructor(readonly code: string) {
-      super(code)
+    readonly name = 'NativeBridgeError'
+
+    constructor(readonly code: string, readonly capability: string, message: string) {
+      super(message)
     }
   }
 
@@ -28,7 +20,6 @@ vi.mock('../services/nativeBridge', () => {
     NativeBridgeError,
     scanCode: mocks.scanCode,
     getNativeBridgeDiagnostics: mocks.getNativeBridgeDiagnostics,
-    getNativeHost: mocks.getNativeHost,
     closeWebView: mocks.closeWebView,
   }
 })
@@ -36,15 +27,12 @@ vi.mock('../services/nativeBridge', () => {
 import ScanVerify from './ScanVerify'
 
 afterEach(() => {
-  mocks.navigate.mockReset()
   mocks.scanCode.mockReset()
   mocks.getNativeBridgeDiagnostics.mockReset()
-  mocks.getNativeHost.mockReset()
-  mocks.getNativeHost.mockReturnValue('browser')
   mocks.closeWebView.mockClear()
 })
 
-describe('ScanVerify', () => {
+describe('ScanVerify card-voucher boundary', () => {
   it('shows explicit unsupported state instead of simulated scan success', () => {
     mocks.getNativeBridgeDiagnostics.mockReturnValue({
       capabilities: {
@@ -96,87 +84,95 @@ describe('ScanVerify', () => {
     })
   })
 
-  it('waits for the confirmed Android transaction and resumes directly at the completed result state', async () => {
-    mocks.getNativeHost.mockReturnValue('android')
+  it('does not send a Native-owned device result into the card-voucher confirmation page', async () => {
     mocks.getNativeBridgeDiagnostics.mockReturnValue({
-      capabilities: {
-        scanCode: true,
-        closeWebView: false,
-      },
+      capabilities: { scanCode: true, closeWebView: false },
     })
-    mocks.scanCode.mockResolvedValue({ code: 'REAL-SCAN-CODE' })
-
-    render(<ScanVerify />)
-
-    fireEvent.click(screen.getByRole('button', { name: '开始扫码核销' }))
-
-    await waitFor(() => {
-      expect(mocks.scanCode).toHaveBeenCalledWith({ scanType: 'qr' })
+    mocks.scanCode.mockResolvedValue({
+      code: 'DEVICE-QR-011',
+      scanType: 'qr',
+      consumeUse: '11',
     })
-    expect(mocks.navigate).toHaveBeenCalledWith('/card/verify/confirm', {
-      replace: true,
-      state: {
-        nativeScanCode: 'REAL-SCAN-CODE',
-        nativeVerifyResult: 'done',
-      },
-    })
-  })
-
-  it('keeps iOS on the existing confirmation flow until terminal transaction semantics are confirmed', async () => {
-    mocks.getNativeHost.mockReturnValue('ios')
-    mocks.getNativeBridgeDiagnostics.mockReturnValue({
-      capabilities: {
-        scanCode: true,
-        closeWebView: false,
-      },
-    })
-    mocks.scanCode.mockResolvedValue({ code: 'IOS-SCAN-CODE' })
 
     render(<ScanVerify />)
     fireEvent.click(screen.getByRole('button', { name: '开始扫码核销' }))
 
     await waitFor(() => {
-      expect(mocks.navigate).toHaveBeenCalledWith('/card/verify/confirm', {
-        state: { nativeScanCode: 'IOS-SCAN-CODE' },
-      })
+      expect(screen.getByText('已识别设备二维码，请按 App 设备页面提示操作')).toBeTruthy()
     })
     expect(mocks.scanCode).toHaveBeenCalledWith({ scanType: 'qr' })
-    expect(mocks.navigate).not.toHaveBeenCalledWith(
-      '/card/verify/confirm',
-      expect.objectContaining({
-        state: expect.objectContaining({ nativeVerifyResult: 'done' }),
-      }),
-    )
   })
 
-  it('keeps an unknown Native failure on the scan page', async () => {
+  it('does not require consumeUse to avoid misclassifying the Native vending use-17 callback', async () => {
     mocks.getNativeBridgeDiagnostics.mockReturnValue({
-      capabilities: {
-        scanCode: true,
-        closeWebView: false,
-      },
+      capabilities: { scanCode: true, closeWebView: false },
+    })
+    mocks.scanCode.mockResolvedValue({
+      code: 'DEVICE-QR-017',
+      scanType: 'qr',
+    })
+
+    render(<ScanVerify />)
+    fireEvent.click(screen.getByRole('button', { name: '开始扫码核销' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('当前扫码结果无法验证为卡券核销码，未发起核销')).toBeTruthy()
+    })
+  })
+
+  it('does not treat every non-device QR as a card voucher', async () => {
+    mocks.getNativeBridgeDiagnostics.mockReturnValue({
+      capabilities: { scanCode: true, closeWebView: false },
+    })
+    mocks.scanCode.mockResolvedValue({
+      code: 'UNKNOWN-NON-DEVICE-QR',
+      scanType: 'qr',
+      isDevice: false,
+    })
+
+    render(<ScanVerify />)
+    fireEvent.click(screen.getByRole('button', { name: '开始扫码核销' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('暂不支持此卡券核销码，未发起核销')).toBeTruthy()
+    })
+  })
+
+  it('does not infer a card-voucher result from a legacy raw iOS payload', async () => {
+    mocks.getNativeBridgeDiagnostics.mockReturnValue({
+      capabilities: { scanCode: true, closeWebView: false },
+    })
+    mocks.scanCode.mockResolvedValue({ code: 'IOS-RAW-QR' })
+
+    render(<ScanVerify />)
+    fireEvent.click(screen.getByRole('button', { name: '开始扫码核销' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('当前扫码结果无法验证为卡券核销码，未发起核销')).toBeTruthy()
+    })
+  })
+
+  it('shows a recoverable failure instead of leaving the scan page busy', async () => {
+    mocks.getNativeBridgeDiagnostics.mockReturnValue({
+      capabilities: { scanCode: true, closeWebView: false },
     })
     mocks.scanCode.mockRejectedValue(new Error('native failed'))
 
     render(<ScanVerify />)
-
     fireEvent.click(screen.getByRole('button', { name: '开始扫码核销' }))
 
     await waitFor(() => {
       expect(screen.getByText('扫码失败，请重试')).toBeTruthy()
     })
-    expect(mocks.navigate).not.toHaveBeenCalled()
+    expect((screen.getByRole('button', { name: '开始扫码核销' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it.each([
     ['native-cancelled', '已取消扫码'],
     ['native-permission-denied', '请允许相机权限后重试'],
-  ] as const)('shows confirmed %s semantics without navigating', async (code, message) => {
+  ] as const)('shows confirmed %s semantics without entering the confirmation route', async (code, message) => {
     mocks.getNativeBridgeDiagnostics.mockReturnValue({
-      capabilities: {
-        scanCode: true,
-        closeWebView: false,
-      },
+      capabilities: { scanCode: true, closeWebView: false },
     })
     const { NativeBridgeError } = await import('../services/nativeBridge')
     mocks.scanCode.mockRejectedValue(
@@ -189,6 +185,5 @@ describe('ScanVerify', () => {
     await waitFor(() => {
       expect(screen.getByText(message)).toBeTruthy()
     })
-    expect(mocks.navigate).not.toHaveBeenCalled()
   })
 })

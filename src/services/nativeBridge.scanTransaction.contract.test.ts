@@ -18,6 +18,7 @@ afterEach(() => {
   delete hostWindow.androidBridge
   delete hostWindow.androidBridgeCallback
   delete hostWindow.nativeBridgeCallback
+  delete hostWindow.iosBridge
 })
 
 function installAndroidScanHost() {
@@ -34,45 +35,65 @@ function installAndroidScanHost() {
   }
 }
 
-describe('scanCode Android H037 transaction contract', () => {
-  it('keeps the first scan-success callback pending and resolves only after device success', async () => {
+describe('scanCode Android feat/1109 callback contract', () => {
+  it('settles the first non-device recognition callback and preserves its routing metadata', async () => {
     const getRequest = installAndroidScanHost()
-    const promise = scanCode({ scanType: 'all' })
+    const promise = scanCode({ scanType: 'qr' })
     const request = getRequest()
-
-    let settled = false
-    promise.finally(() => {
-      settled = true
-    })
+    const raw = 'https://kbs.3cgroup.cn/buddy/invite/scan?code=550e8400-e29b-41d4-a716-446655440000'
 
     hostWindow.androidBridgeCallback?.(request.callbackId, {
       code: 0,
       message: 'ok',
-      data: { text: 'DEVICE-QR-001', scanType: 'qr' },
+      data: { text: raw, scanType: 'qr', isDevice: false },
     })
 
-    await Promise.resolve()
-    expect(settled).toBe(false)
-
-    hostWindow.androidBridgeCallback?.(request.callbackId, {
-      code: 0,
-      message: 'ok',
-      data: { text: 'DEVICE-QR-001', scanType: 'qr' },
+    await expect(promise).resolves.toEqual({
+      code: raw,
+      scanType: 'qr',
+      isDevice: false,
     })
-
-    await expect(promise).resolves.toEqual({ code: 'DEVICE-QR-001' })
   })
 
-  it('rejects when the device stage fails after a successful scan', async () => {
+  it('settles a Native-owned device start callback and preserves consumeUse when present', async () => {
     const getRequest = installAndroidScanHost()
-    const promise = scanCode({ scanType: 'all' })
+    const promise = scanCode({ scanType: 'qr' })
     const request = getRequest()
 
     hostWindow.androidBridgeCallback?.(request.callbackId, {
       code: 0,
       message: 'ok',
-      data: { text: 'DEVICE-QR-002', scanType: 'qr' },
+      data: { text: 'DEVICE-QR-011', scanType: 'qr', consumeUse: '11' },
     })
+
+    await expect(promise).resolves.toEqual({
+      code: 'DEVICE-QR-011',
+      scanType: 'qr',
+      consumeUse: '11',
+    })
+  })
+
+  it('settles vending use-17 callbacks without inventing isDevice or consumeUse metadata', async () => {
+    const getRequest = installAndroidScanHost()
+    const promise = scanCode({ scanType: 'qr' })
+    const request = getRequest()
+
+    hostWindow.androidBridgeCallback?.(request.callbackId, {
+      code: 0,
+      message: 'ok',
+      data: { text: 'DEVICE-QR-017', scanType: 'qr' },
+    })
+
+    await expect(promise).resolves.toEqual({
+      code: 'DEVICE-QR-017',
+      scanType: 'qr',
+    })
+  })
+
+  it('rejects when the Native-owned device start fails', async () => {
+    const getRequest = installAndroidScanHost()
+    const promise = scanCode({ scanType: 'qr' })
+    const request = getRequest()
 
     hostWindow.androidBridgeCallback?.(request.callbackId, {
       code: 5,
@@ -91,9 +112,9 @@ describe('scanCode Android H037 transaction contract', () => {
     [1, 'native-cancelled'],
     [2, 'native-permission-denied'],
     [3, 'native-permission-denied'],
-  ] as const)('settles first-stage Native code %s immediately as %s', async (nativeCode, errorCode) => {
+  ] as const)('settles Native code %s immediately as %s', async (nativeCode, errorCode) => {
     const getRequest = installAndroidScanHost()
-    const promise = scanCode({ scanType: 'all' })
+    const promise = scanCode({ scanType: 'qr' })
     const request = getRequest()
 
     hostWindow.androidBridgeCallback?.(request.callbackId, {
@@ -109,39 +130,45 @@ describe('scanCode Android H037 transaction contract', () => {
     })
   })
 
-  it('cleans up the Android scan pending entry at the existing callback timeout', async () => {
+  it('cleans the pending callback after the first terminal result', async () => {
     vi.useFakeTimers()
 
     const lateCallbackFallback = vi.fn()
     hostWindow.androidBridgeCallback = lateCallbackFallback
 
     const getRequest = installAndroidScanHost()
-    const promise = scanCode({ scanType: 'all' })
-    promise.catch(() => undefined)
+    const promise = scanCode({ scanType: 'qr' })
     const request = getRequest()
 
     hostWindow.androidBridgeCallback?.(request.callbackId, {
       code: 0,
       message: 'ok',
-      data: { text: 'DEVICE-QR-TIMEOUT', scanType: 'qr' },
+      data: { text: 'UNKNOWN-QR', scanType: 'qr', isDevice: false },
     })
+
+    await expect(promise).resolves.toMatchObject({ code: 'UNKNOWN-QR', isDevice: false })
+
+    const latePayload = { code: 0, message: 'duplicate', data: {} }
+    hostWindow.androidBridgeCallback?.(request.callbackId, latePayload)
+    expect(lateCallbackFallback).toHaveBeenCalledWith(request.callbackId, latePayload)
 
     await vi.advanceTimersByTimeAsync(INJECTED_CALLBACK_TIMEOUT_MS)
+    expect(lateCallbackFallback).toHaveBeenCalledTimes(1)
+  })
 
-    await expect(promise).rejects.toMatchObject({
-      name: 'NativeBridgeError',
-      capability: 'scanCode',
-    })
+  it('keeps the existing one-shot iOS adapter shape without inferring Android metadata', async () => {
+    let request: CapturedScanRequest | undefined
+    hostWindow.iosBridge = {
+      scanCode(payload: unknown) {
+        request = JSON.parse(payload as string) as CapturedScanRequest
+      },
+    }
 
-    hostWindow.androidBridgeCallback?.(request.callbackId, {
-      code: 0,
-      message: 'late-device-result',
-      data: { text: 'DEVICE-QR-TIMEOUT', scanType: 'qr' },
-    })
+    const promise = scanCode({ scanType: 'qr' })
+    if (!request) throw new Error('iOS scanCode request was not captured')
 
-    expect(lateCallbackFallback).toHaveBeenCalledWith(
-      request.callbackId,
-      expect.objectContaining({ message: 'late-device-result' }),
-    )
+    hostWindow.nativeBridgeCallback?.(request.callbackId, JSON.stringify({ code: 'IOS-RAW-QR' }))
+
+    await expect(promise).resolves.toEqual({ code: 'IOS-RAW-QR' })
   })
 })
