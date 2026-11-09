@@ -1,5 +1,8 @@
 # H037｜真实 Native 事务回调对齐设计证据
 
+> **历史合同说明（2026-11-09）**：本文记录的是 Android `upstream/gitee/master@a8ac84694d2f69e0c1bfa10619fdc3810845a337` 的旧两阶段扫码事务证据。该证据仍保留为历史事实，但不再代表 Android `feat/1109@b595a72b28d38ef033117ebaa91ff5919a4ef763` 的当前 H5 callback 合同。新分支对非设备码一次回调并显式提供 `data.isDevice=false`；设备 11–14 的启动回调带 `consumeUse`，Native 详情页继续负责后续结算；设备 17 的回调只带 `text/scanType`，不带 `isDevice` 或 `consumeUse`。H045（[#295](https://github.com/sanchuang-dev/dr-card-web/issues/295)）据此收口 H5：只对显式 `isDevice=false` 分流，Native 设备结果不进入 H5 业务。**这不构成 iOS 已实现扫码能力的证据。**
+
+
 > 本文件是 H037 的设计依据，不是实现结果。  
 > H037 的代码施工、测试与验收必须能回溯到这里记录的已确认事实；未在本文件确认的 Native 内部行为不得由 H5 自行推断。
 
