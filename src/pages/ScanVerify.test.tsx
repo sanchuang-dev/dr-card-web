@@ -167,23 +167,37 @@ describe('ScanVerify card-voucher boundary', () => {
     expect((screen.getByRole('button', { name: '开始扫码核销' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it.each([
-    ['native-cancelled', '已取消扫码'],
-    ['native-permission-denied', '请允许相机权限后重试'],
-  ] as const)('shows confirmed %s semantics without entering the confirmation route', async (code, message) => {
+  it('returns quietly when the user cancels the card scan', async () => {
     mocks.getNativeBridgeDiagnostics.mockReturnValue({
       capabilities: { scanCode: true, closeWebView: false },
     })
     const { NativeBridgeError } = await import('../services/nativeBridge')
     mocks.scanCode.mockRejectedValue(
-      new NativeBridgeError(code, 'scanCode', 'confirmed Native failure'),
+      new NativeBridgeError('native-cancelled', 'scanCode', 'cancelled'),
+    )
+
+    render(<ScanVerify />)
+    fireEvent.click(screen.getByRole('button', { name: '开始扫码核销' }))
+
+    await waitFor(() => expect(mocks.scanCode).toHaveBeenCalledTimes(1))
+    expect(screen.queryByText('已取消扫码')).toBeNull()
+    expect(screen.getByText('将卡券二维码对准扫描框，点击开始扫码')).toBeTruthy()
+  })
+
+  it('shows a recoverable message when camera permission is denied', async () => {
+    mocks.getNativeBridgeDiagnostics.mockReturnValue({
+      capabilities: { scanCode: true, closeWebView: false },
+    })
+    const { NativeBridgeError } = await import('../services/nativeBridge')
+    mocks.scanCode.mockRejectedValue(
+      new NativeBridgeError('native-permission-denied', 'scanCode', 'permission denied'),
     )
 
     render(<ScanVerify />)
     fireEvent.click(screen.getByRole('button', { name: '开始扫码核销' }))
 
     await waitFor(() => {
-      expect(screen.getByText(message)).toBeTruthy()
+      expect(screen.getByText('请允许相机权限后重试')).toBeTruthy()
     })
   })
 })

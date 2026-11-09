@@ -55,9 +55,8 @@ export default function ScanVerify() {
       }
     } catch (error) {
       if (error instanceof NativeBridgeError) {
-        if (error.code === 'native-cancelled') {
-          setError('已取消扫码')
-        } else if (error.code === 'native-permission-denied') {
+        if (error.code === 'native-cancelled') return
+        if (error.code === 'native-permission-denied') {
           setError('请允许相机权限后重试')
         } else {
           setError('扫码失败，请重试')
