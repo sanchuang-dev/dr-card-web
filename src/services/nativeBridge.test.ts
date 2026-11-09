@@ -422,7 +422,7 @@ describe('JSBridge capability runtime', () => {
   })
 
 
-  it('correlates Android scanCode through androidBridgeCallback and settles one non-device result', async () => {
+  it('correlates Android scanCode through androidBridgeCallback and preserves one-shot routing metadata', async () => {
     const { scanCode, getNativeBridgeDiagnostics } = await loadBridge()
     const received: Array<{ scanType: string; callbackId: string }> = []
     const androidBridge = {
