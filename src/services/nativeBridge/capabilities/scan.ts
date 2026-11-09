@@ -10,6 +10,7 @@ import { parseConfirmedNativeResult } from '../protocol'
 import type {
   NativeScanCodeInput,
   NativeScanCodeResult,
+  NativeScanType,
 } from '../types'
 
 function validateInput(input: NativeScanCodeInput): NativeScanCodeInput {
@@ -38,11 +39,12 @@ function parseResult(payload: unknown): NativeScanCodeResult {
   const data = parsed !== null && typeof parsed === 'object'
     ? (parsed as { data?: unknown }).data
     : undefined
+  const dataRecord = data !== null && typeof data === 'object'
+    ? data as { text?: unknown; isDevice?: unknown; scanType?: unknown }
+    : undefined
   const code = typeof (parsed as { code?: unknown })?.code === 'string'
     ? (parsed as { code: string }).code
-    : data !== null && typeof data === 'object'
-      ? (data as { text?: unknown }).text
-      : undefined
+    : dataRecord?.text
   const nativeCode = (parsed as { code?: unknown })?.code
   if (typeof nativeCode === 'number' && nativeCode !== 0) {
     const errorCode = nativeCode === 1 ? 'native-cancelled' : nativeCode === 2 || nativeCode === 3 ? 'native-permission-denied' : 'native-failed'
@@ -55,13 +57,21 @@ function parseResult(payload: unknown): NativeScanCodeResult {
     )
   }
 
-  return { code }
+  const scanType = dataRecord?.scanType
+  const isDevice = dataRecord?.isDevice
+  return {
+    code,
+    ...(typeof isDevice === 'boolean' ? { isDevice } : {}),
+    ...(typeof scanType === 'string' && ['qr', 'bar', 'all'].includes(scanType)
+      ? { scanType: scanType as NativeScanType }
+      : {}),
+  }
 }
 
 function isAndroidScanTerminalPayload(payload: unknown, callbackCount: number): boolean {
-  // Current Android H5 voucher verification is a two-stage Native-owned transaction:
-  // 1) scanner recognized a code, 2) device start/dispense finished. Only the second success
-  // callback is terminal. A first-stage failure/cancel/permission result still settles immediately.
+  // Android completes recognition-only QR codes on the first callback. Device scans retain the
+  // same callbackId for the Native-owned transaction and settle only on its later terminal result.
+  // Missing isDevice keeps the legacy two-stage behavior for older Android hosts.
   if (callbackCount > 1) return true
 
   try {
@@ -71,12 +81,15 @@ function isAndroidScanTerminalPayload(payload: unknown, callbackCount: number): 
 
     const nativeCode = (parsed as { code?: unknown }).code
     const data = (parsed as { data?: unknown }).data
-    const text =
-      data !== null && typeof data === 'object'
-        ? (data as { text?: unknown }).text
-        : undefined
+    const record = data !== null && typeof data === 'object'
+      ? data as { text?: unknown; isDevice?: unknown }
+      : undefined
+    const text = record?.text
 
-    return !(nativeCode === 0 && typeof text === 'string' && text.length > 0)
+    if (nativeCode !== 0 || typeof text !== 'string' || text.length === 0) return true
+
+    // The observed non-device classification has no second Native device stage to await.
+    return record?.isDevice === false
   } catch {
     // Malformed payloads should settle and fail parsing instead of leaving the transaction pending.
     return true

@@ -63,6 +63,49 @@ describe('scanCode Android H037 transaction contract', () => {
     await expect(promise).resolves.toEqual({ code: 'DEVICE-QR-001' })
   })
 
+  it('settles a non-device QR from the first recognition callback and preserves classification', async () => {
+    const getRequest = installAndroidScanHost()
+    const promise = scanCode({ scanType: 'qr' })
+    const request = getRequest()
+    const raw = 'https://kbs.3cgroup.cn/buddy/invite/scan?code=550e8400-e29b-41d4-a716-446655440000'
+
+    hostWindow.androidBridgeCallback?.(request.callbackId, {
+      code: 0,
+      message: 'ok',
+      data: { text: raw, scanType: 'qr', isDevice: false },
+    })
+
+    await expect(promise).resolves.toEqual({ code: raw, scanType: 'qr', isDevice: false })
+  })
+
+  it('keeps an explicitly classified device QR pending until its terminal callback', async () => {
+    const getRequest = installAndroidScanHost()
+    const promise = scanCode({ scanType: 'qr' })
+    const request = getRequest()
+    let settled = false
+    promise.finally(() => { settled = true })
+
+    hostWindow.androidBridgeCallback?.(request.callbackId, {
+      code: 0,
+      message: 'ok',
+      data: { text: 'DEVICE-QR-IS-DEVICE', scanType: 'qr', isDevice: true },
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    hostWindow.androidBridgeCallback?.(request.callbackId, {
+      code: 0,
+      message: 'ok',
+      data: { text: 'DEVICE-QR-IS-DEVICE', scanType: 'qr', isDevice: true },
+    })
+
+    await expect(promise).resolves.toEqual({
+      code: 'DEVICE-QR-IS-DEVICE',
+      scanType: 'qr',
+      isDevice: true,
+    })
+  })
+
   it('rejects when the device stage fails after a successful scan', async () => {
     const getRequest = installAndroidScanHost()
     const promise = scanCode({ scanType: 'all' })

@@ -31,7 +31,11 @@ export interface NativeScanCodeInput {
 }
 
 export interface NativeScanCodeResult {
+  /** Raw text decoded by the Native scanner. */
   code: string
+  /** Native classification: false is a recognition-only QR; true enters the device transaction. */
+  isDevice?: boolean
+  scanType?: NativeScanType
 }
 
 export interface NativeTakePhotoInput {

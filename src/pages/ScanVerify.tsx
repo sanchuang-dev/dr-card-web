@@ -8,6 +8,10 @@ import {
   NativeBridgeError,
   scanCode,
 } from '../services/nativeBridge'
+import {
+  getNativeScanUnsupportedMessage,
+  resolveNativeScanDestination,
+} from '../services/nativeScanRouting'
 
 export interface ScanVerifyNavigationState {
   nativeScanCode: string
@@ -49,29 +53,47 @@ export default function ScanVerify() {
     try {
       const host = getNativeHost()
       const result = await scanCode({ scanType: 'qr' })
+      const destination = resolveNativeScanDestination(
+        result,
+        host,
+        import.meta.env.VITE_BUDDY_PUBLIC_ORIGIN,
+      )
 
-      if (host === 'android') {
-        const state: ScanVerifyNavigationState = {
-          nativeScanCode: result.code,
-          nativeVerifyResult: 'done',
-        }
-        // H037 has Android evidence that scanCode resolves only after the device transaction
-        // completes, so H5 resumes directly at the completed result state.
-        navigate('/card/verify/confirm', { replace: true, state })
+      if (destination.kind === 'buddy') {
+        navigate('/buddy/accept', {
+          replace: true,
+          state: {
+            buddyScan: {
+              source: 'native-buddy-recognition',
+              raw: destination.raw,
+            },
+          },
+        })
         return
       }
 
-      // iOS still has only the retained one-callback scanner contract in H5 evidence. Until Native
-      // terminal transaction semantics are independently confirmed, preserve the existing
-      // confirmation flow and never label a scan recognition as completed verification.
-      const state: ScanVerifyNavigationState = { nativeScanCode: result.code }
-      navigate('/card/verify/confirm', { state })
+      if (destination.kind === 'unsupported') {
+        setError(getNativeScanUnsupportedMessage(destination.reason))
+        setScanning(false)
+        return
+      }
+
+      const state: ScanVerifyNavigationState = {
+        nativeScanCode: destination.code,
+        ...(destination.nativeTransactionComplete ? { nativeVerifyResult: 'done' as const } : {}),
+      }
+      navigate('/card/verify/confirm', {
+        ...(destination.nativeTransactionComplete ? { replace: true } : {}),
+        state,
+      })
     } catch (error) {
       if (error instanceof NativeBridgeError) {
         if (error.code === 'native-cancelled') {
           setError('已取消扫码')
         } else if (error.code === 'native-permission-denied') {
           setError('请允许相机权限后重试')
+        } else if (error.code === 'bridge-unsupported' || error.code === 'capability-unsupported') {
+          setError('当前 App 版本暂不支持扫码')
         } else {
           setError('扫码失败，请重试')
         }
