@@ -27,6 +27,7 @@ export function connectChatSocket(token: string, callbacks: ChatSocketEvents): C
   // Keep it separate from path, which configures the Engine.IO transport endpoint.
   const socket: Socket = io(`${runtimePolicy.socketBaseUrl ?? new URL(base).origin}${CHAT_SOCKET_NAMESPACE}`, {
     path: runtimePolicy.socketPath ?? '/socket.io',
+    transports: ['websocket'],
     auth: { token: `Bearer ${token}` },
     autoConnect: false,
     reconnection: true,
