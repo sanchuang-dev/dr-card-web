@@ -30,5 +30,9 @@ describe('ConfirmVerify Native scan result boundary', () => {
     expect(screen.getByText(VERIFY_VOUCHER_FIXTURE.store)).toBeTruthy()
     expect(screen.queryByRole('button', { name: '返回卡包' })).toBeNull()
     expect(screen.queryByText(VERIFY_FEEDBACK.done.title)).toBeNull()
+    expect(screen.getByText('真实核销服务尚未接入，此页面暂不能执行核销')).toBeTruthy()
+    expect(
+      (screen.getByRole('button', { name: '真实核销暂未接入' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
   })
 })
