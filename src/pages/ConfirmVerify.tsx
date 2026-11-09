@@ -6,6 +6,7 @@ import PageContainer from '../components/mobile/PageContainer'
 import { useFixtureState } from '../app/fixtures/useFixture'
 import { findRouteByPathname } from '../app/router/routes'
 import { VERIFY_FEEDBACK, VERIFY_VOUCHER_FIXTURE } from '../app/fixtures'
+import { runtimePolicy } from '../app/config/runtime'
 
 /**
  * 确认核销（#67 防误触确认 / 已核销 / 重复核销）
@@ -86,7 +87,11 @@ export default function ConfirmVerify() {
           <Check className="h-8 w-8" />
         </span>
         <h2 className="mt-4 text-xl font-semibold text-text-primary">即将核销此券</h2>
-        <p className="mt-1 text-sm text-text-tertiary">请与门店店员核对，确认后权益将立即扣减</p>
+        <p className="mt-1 text-sm text-text-tertiary">
+          {runtimePolicy.fixtureQueriesEnabled
+            ? '演示流程不会真实扣券，请勿作为实际核销凭证'
+            : '真实核销服务尚未接入，此页面暂不能执行核销'}
+        </p>
       </section>
 
       <section className="mt-6" aria-label="核销设备">
@@ -138,10 +143,13 @@ export default function ConfirmVerify() {
         </button>
         <button
           type="button"
-          onClick={() => setToast(true)}
-          className="h-12 flex-[2] rounded-full bg-primary text-sm font-medium text-text-inverse active:bg-primary-pressed"
+          onClick={() => {
+            if (runtimePolicy.fixtureQueriesEnabled) setToast(true)
+          }}
+          disabled={!runtimePolicy.fixtureQueriesEnabled}
+          className="h-12 flex-[2] rounded-full bg-primary text-sm font-medium text-text-inverse active:bg-primary-pressed disabled:cursor-not-allowed disabled:opacity-50"
         >
-          确认核销
+          {runtimePolicy.fixtureQueriesEnabled ? '模拟核销（仅演示）' : '真实核销暂未接入'}
         </button>
       </div>
 
