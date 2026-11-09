@@ -39,7 +39,7 @@ const assertText = async (text, label) => {
 // —— 节点 #58 欢迎态：只有小诗欢迎语，不出现未确认的热门问题 ——
 await go('/service/chat')
 await assertText('你好，我是诗得丽 AI 客服小诗', '#58 欢迎态')
-await assertText('企微客服', '#58 右上角入口')
+if (await page.locator('[data-chat-wecom-entry]').count()) problems.push('[assert] 已隐藏的右上企微入口仍存在')
 const welcomeCount = await page.locator('[data-chat-message]').count()
 console.log(`  #58 欢迎态消息数: ${welcomeCount}`)
 if (welcomeCount !== 1) problems.push(`[assert] 欢迎态应只有 1 条消息，实际 ${welcomeCount}`)
@@ -84,9 +84,9 @@ console.log(`  含失败关键词的发送失败气泡: ${keywordFailed}（预�
 if (keywordFailed !== 1) problems.push(`[assert] 含「断网」的输入应稳定失败，实际失败 ${keywordFailed} 条`)
 await shot('58-keyword-failed')
 
-// —— 节点 #71 弹层：右上角「企微客服」入口 ——
+// —— 节点 #71 弹层：仅通过底部「人工」入口打开，右上企微入口隐藏 ——
 await go('/service/chat')
-await page.locator('[data-chat-wecom-entry]').click()
+await page.locator('[data-chat-human-entry]').click()
 await page.waitForTimeout(250)
 await assertText('请添加我们的企业微信福利官获取人工客服服务', '#71 弹层标题')
 await assertText('取消', '#71 取消')
@@ -101,7 +101,7 @@ if (sheetGone !== 0) problems.push('[assert] 点击取消后弹层未关闭')
 console.log(`  取消后 URL: ${new URL(page.url()).search || '(无 query)'}`)
 await shot('71-after-cancel')
 
-// —— #71 由页内「人工客服」入口打开 ——
+// —— #71 底部「人工」入口再次打开同一原企微弹层（取消后可重试）——
 await page.locator('[data-chat-human-entry]').click()
 await page.waitForTimeout(250)
 await assertText('请添加我们的企业微信福利官获取人工客服服务', '#71 页内入口')

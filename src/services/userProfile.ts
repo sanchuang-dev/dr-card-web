@@ -38,6 +38,7 @@ export const USER_UPDATE_PATH = '/api/user/update'
  */
 const userDetailSchema = z
   .object({
+    id: z.number().optional(),
     nick_name: z.string().nullish(),
     grade: z.string().nullish(),
     // Persisted academic year. Do not confuse it with the membership tier `grade`.
@@ -50,6 +51,8 @@ const userDetailSchema = z
   .passthrough()
 
 export interface UserProfileDetail {
+  /** User ID is used only to scope a non-secret UI mask flag to the account. */
+  userId?: number
   /** `nick_name`；接口未给时为空串。 */
   nickname: string
   /** Saved academic year: `student_grade` first; legacy `grade` only if absent. */
@@ -69,6 +72,7 @@ export function parseUserProfileDetail(payload: unknown): UserProfileDetail {
   })
 
   return {
+    ...(detail.id !== undefined ? { userId: detail.id } : {}),
     nickname: detail.nick_name?.trim() ?? '',
     // `grade` may be a membership title; `student_grade` is the academic year
     // written by POST /api/user/update. An explicit empty academic year is valid
@@ -290,13 +294,10 @@ export async function updateUserProfile(payload: UserUpdatePayload): Promise<Use
     contract: 'user.update',
     fallbackMessage: '资料保存失败',
   })
-  // This backend silently drops unsupported keys and can respond code=0.
-  // Verify positive acknowledgement before telling the user they saved data.
+  // The unified code=0 API response is the PIN save success criterion.
+  // Do not add a second client-side PIN status acknowledgement requirement.
   if (payload.birthday !== undefined && result.birthday !== payload.birthday) {
     throw new Error('生日未保存，请稍后重试')
-  }
-  if (payload.consume_password !== undefined && result.consume_password_set !== true) {
-    throw new Error('消费密码未确认保存，请稍后重试')
   }
   // Drop accidental echoes of a submitted secret from the parsed entity.
   const safeResult = { ...result }

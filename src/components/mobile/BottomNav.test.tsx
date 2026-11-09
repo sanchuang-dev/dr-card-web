@@ -53,7 +53,7 @@ describe('BottomNav middle scan item', () => {
     fireEvent.click(button)
 
     await waitFor(() => {
-      expect(bridgeMocks.scanCode).toHaveBeenCalledWith({ scanType: 'all' })
+      expect(bridgeMocks.scanCode).toHaveBeenCalledWith({ scanType: 'qr' })
     })
   })
 

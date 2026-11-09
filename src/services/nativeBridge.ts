@@ -23,6 +23,8 @@ import type {
 } from './nativeBridge/types'
 
 export { NativeBridgeError } from './nativeBridge/errors'
+export { subscribeNativeBridgeTransportDebugEvents } from './nativeBridgeTransport'
+export type { NativeBridgeTransportDebugEvent } from './nativeBridgeTransport'
 export {
   getNativeBridgeCapabilityCatalog,
   getNativeBridgeDiagnostics,

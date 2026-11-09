@@ -38,4 +38,11 @@ export const STORAGE_KEYS = {
     'session',
     z.object({ accessToken: z.string().min(1) }),
   ),
+  // User-confirmed UI preference: only retain a per-account six-dot mask flag
+  // after successful profile update. Never persist the PIN or its digest.
+  profilePinMasks: defineStorageKey(
+    'profile-pin-masks',
+    'local',
+    z.record(z.string(), z.literal(true)),
+  ),
 } as const

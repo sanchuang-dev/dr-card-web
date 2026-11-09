@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
-const mocks = vi.hoisted(() => ({ useSignRecords: vi.fn(), navigate: vi.fn() }))
+const mocks = vi.hoisted(() => ({ useSignRecords: vi.fn(), navigate: vi.fn(), reloadSignStatus: vi.fn() }))
 
 vi.mock('react-router-dom', async (importOriginal) => {
   const original = await importOriginal<typeof import('react-router-dom')>()
@@ -15,7 +15,7 @@ vi.mock('react-router-dom', async (importOriginal) => {
 vi.mock('./checkin/useCheckinFeed', () => ({ useSignRecords: mocks.useSignRecords }))
 vi.mock('./home/useHomeFeed', () => ({
   useHomeBanners: () => ({ state: 'success', data: [] }),
-  useSignStatus: () => ({ state: 'loading' }),
+  useSignStatus: () => ({ state: 'loading', reload: mocks.reloadSignStatus }),
 }))
 vi.mock('../app/fixtures/useFixture', () => ({
   useFixtureState: () => null,
@@ -38,6 +38,8 @@ afterEach(() => {
   cleanup()
   mocks.useSignRecords.mockReset()
   mocks.navigate.mockReset()
+  mocks.reloadSignStatus.mockReset()
+  vi.useRealTimers()
 })
 
 describe('Issue #89: home check-in scope', () => {
@@ -46,5 +48,23 @@ describe('Issue #89: home check-in scope', () => {
     render(<Home />)
     expect(screen.getByTestId('home-checkin-board')).toBeTruthy()
     expect(mocks.useSignRecords).toHaveBeenCalledWith('week')
+  })
+})
+
+describe('Issue #220: cross-day refresh', () => {
+  it('reloads week records on returning to the visible app after the local day changes', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 9, 11, 23, 30))
+    const reload = vi.fn()
+    mocks.useSignRecords.mockReturnValue({ remote: { state: 'success', data: [] }, reload })
+    render(<Home />)
+
+    vi.setSystemTime(new Date(2026, 9, 12, 8))
+    fireEvent(document, new Event('visibilitychange'))
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(mocks.reloadSignStatus).toHaveBeenCalledTimes(1)
+    fireEvent(document, new Event('visibilitychange'))
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(mocks.reloadSignStatus).toHaveBeenCalledTimes(1)
   })
 })

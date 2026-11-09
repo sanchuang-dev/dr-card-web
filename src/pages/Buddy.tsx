@@ -92,6 +92,22 @@ export default function Buddy() {
           演示搭子资料，非真实账号关系
         </p>
       )}
+      {!fixtureMode && remote.status === 'ready' && (
+        <div className="flex min-h-10 items-center justify-between px-5 pt-2" aria-label="搭子列表操作">
+          <h2 className="text-sm font-medium text-buddy-text">我的搭子</h2>
+          <Button
+            variant="ghost"
+            size="regular"
+            leadingIcon={RefreshCw}
+            aria-label="刷新搭子列表"
+            className="gap-1.5 px-2 text-[13px]"
+            onClick={() => setRetry(value => value + 1)}
+          >
+            刷新
+          </Button>
+        </div>
+      )}
+
       {!fixtureMode && remote.status !== 'ready' ? (
         <section role="status" className="mx-4 mt-4 rounded-container bg-surface px-4 py-10 text-center shadow-card">
           {remote.status === 'loading' ? (
@@ -132,7 +148,7 @@ export default function Buddy() {
           }
         />
       ) : (
-        <section className="px-4 pt-3" aria-label="我的洗头搭子">
+        <section className={`px-4 ${fixtureMode ? 'pt-3' : 'pt-1'}`} aria-label="我的洗头搭子">
           <ul className="space-y-2.5">
             {displayed.map((buddy) => (
               <li key={buddy.id}>
@@ -153,15 +169,6 @@ export default function Buddy() {
             ))}
           </ul>
         </section>
-      )}
-
-      {!fixtureMode && remote.status === 'ready' && (
-        <div className="mt-3 px-4 text-right">
-          <Button variant="outline" size="regular" leadingIcon={RefreshCw}
-            onClick={() => setRetry(value => value + 1)}>
-            刷新搭子列表
-          </Button>
-        </div>
       )}
 
       <section className="mt-4 px-4" aria-label={BUDDY_FEATURE_INTRO.title}>

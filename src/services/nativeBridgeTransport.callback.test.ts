@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createCallbackInjectedObjectTransport,
   INJECTED_CALLBACK_TIMEOUT_MS,
+  subscribeNativeBridgeTransportDebugEvents,
+  type NativeBridgeTransportDebugEvent,
   type NativeTransportResolution,
   type NativeTransportWindow,
 } from './nativeBridgeTransport'
@@ -124,6 +126,102 @@ describe('Android injected callback dispatcher', () => {
 
     hostWindow.androidBridgeCallback?.(requests[0].callbackId, { value: 'device-finished' })
     await expect(promise).resolves.toBe('device-finished')
+  })
+
+  it('emits request correlation and callback-stage diagnostics without changing settlement', async () => {
+    const events: NativeBridgeTransportDebugEvent[] = []
+    const unsubscribe = subscribeNativeBridgeTransportDebugEvents((event) => events.push(event))
+    const requests: Array<{ scanType: string; callbackId: string }> = []
+    hostWindow.androidBridge = {
+      scanCode(payload: unknown) {
+        requests.push(JSON.parse(payload as string) as { scanType: string; callbackId: string })
+      },
+    }
+    const transport = createCallbackInjectedObjectTransport<'all', string>({
+      objectName: 'androidBridge',
+      methodName: 'scanCode',
+      callbackName: 'nativeBridgeCallback',
+      callbackAliases: ['androidBridgeCallback'],
+      timeoutMs: 1_000,
+      serializeArgs: (scanType, callbackId) => [JSON.stringify({ scanType, callbackId })],
+      isTerminalPayload: (_payload, callbackCount) => callbackCount > 1,
+      parseResult: (payload) => (payload as { result: string }).result,
+    })
+
+    try {
+      const promise = invoke(transport.resolve(hostWindow, 'all'))
+      const request = requests[0]
+      expect(request).toBeDefined()
+      expect(events[0]).toMatchObject({
+        type: 'request',
+        objectName: 'androidBridge',
+        methodName: 'scanCode',
+        callbackId: request.callbackId,
+        callbackNames: ['nativeBridgeCallback', 'androidBridgeCallback'],
+        timeoutMs: 1_000,
+        args: [expect.stringContaining(request.callbackId)],
+      })
+
+      hostWindow.androidBridgeCallback?.(request.callbackId, { result: 'scan-recognized' })
+      expect(events[1]).toMatchObject({
+        type: 'callback',
+        objectName: 'androidBridge',
+        methodName: 'scanCode',
+        callbackId: request.callbackId,
+        callbackName: 'androidBridgeCallback',
+        source: 'callback',
+        callbackCount: 1,
+        pendingMatched: true,
+        terminal: false,
+      })
+
+      hostWindow.nativeBridgeCallback?.(request.callbackId, { result: 'device-finished' })
+      expect(events[2]).toMatchObject({
+        type: 'callback',
+        callbackId: request.callbackId,
+        callbackName: 'nativeBridgeCallback',
+        source: 'callback',
+        callbackCount: 2,
+        pendingMatched: true,
+        terminal: true,
+      })
+      await expect(promise).resolves.toBe('device-finished')
+
+      hostWindow.androidBridgeCallback?.('unmatched-callback-id', { error: 'unknown' })
+      expect(events[3]).toMatchObject({
+        type: 'callback',
+        callbackId: 'unmatched-callback-id',
+        callbackName: 'androidBridgeCallback',
+        pendingMatched: false,
+      })
+      expect(events).toHaveLength(4)
+    } finally {
+      unsubscribe()
+    }
+  })
+
+  it('emits a correlated timeout event and still rejects the pending invocation', async () => {
+    vi.useFakeTimers()
+    const events: NativeBridgeTransportDebugEvent[] = []
+    const unsubscribe = subscribeNativeBridgeTransportDebugEvents((event) => events.push(event))
+    hostWindow.androidBridge = { scanCode() {} }
+    const transport = createProbeTransport('scanCode', 25)
+
+    try {
+      const promise = invoke(transport.resolve(hostWindow, 'waiting'))
+      const rejection = expect(promise).rejects.toMatchObject({ code: 'callback-timeout' })
+      await vi.advanceTimersByTimeAsync(25)
+      await rejection
+      expect(events).toContainEqual(expect.objectContaining({
+        type: 'timeout',
+        objectName: 'androidBridge',
+        methodName: 'scanCode',
+        timeoutMs: 25,
+        callbackId: expect.any(String),
+      }))
+    } finally {
+      unsubscribe()
+    }
   })
 
   it('resolves out-of-order callbacks by callbackId instead of invocation order', async () => {

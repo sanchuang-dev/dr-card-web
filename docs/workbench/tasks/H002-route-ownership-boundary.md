@@ -29,7 +29,7 @@
 - ownership 明确为 `formal-h5` / `native-reference`；engineering scope 明确为 `active` / `deferred`。
 - 当前登记 45 条 Native reference canonical route，包括不含 `legacy` 的 `/device/*`、`/vending/*`、`/signin` 与 `/signin/detail`。
 - PR #6 的 Codex Review 指出 `/signin`、`/signin/detail` 漏归类；复核 router 后确认两条路由分别直接渲染 `pages/legacy/SignInPage` 与 `pages/legacy/PointsPage`，修正已补入 Native reference。
-- 商城三条路由保持 formal-H5 ownership，但按当前决定标记为 `deferred`；现有商城 Tab 不因此消失。
+- 实施时商城三条路由保持 formal-H5 ownership，但按当时决定标记为 `deferred`；现有商城 Tab 不因此消失。当前 `/mall` 已依据后续 D-082/D-084 转为 active，商城详情与购物车仍 deferred。
 - 导出 `ACTIVE_FORMAL_H5_ROUTES`，供后续 CI / E2E / 体验治理统一枚举。
 - `BottomNav` 主入口、`MobileLayout` 主 Tab 判断、`DebugPanel` 已实际消费统一 scope。
 - reference 路由注册表与页面实现未删除、未重写。

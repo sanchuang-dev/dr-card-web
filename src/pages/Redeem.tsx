@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { AlertCircle, CheckCircle2, Loader2, Ticket, XCircle } from 'lucide-react'
+import { useBlocker, useNavigate } from 'react-router-dom'
+import { AlertCircle, CheckCircle2, Ticket, XCircle } from 'lucide-react'
 import DebugPanel from '../components/mobile/DebugPanel'
+import { isAppError } from '../services/http'
+import { runtimePolicy } from '../app/config/runtime'
+import { redeemCardCode, type RedemptionReceipt } from '../services/redeemCode'
 import PageContainer from '../components/mobile/PageContainer'
+import ProjectSelectScreen from './exchange/ProjectSelectScreen'
 import { useFixtureState } from '../app/fixtures/useFixture'
 import { findRouteByPathname } from '../app/router/routes'
 import {
@@ -18,12 +22,8 @@ import {
  * -------------------------------------------------------------
  * 视觉与交互取自 reference/兑换卡券.html：ticket 前缀图标、56 高输入框、聚焦描边、
  * 清除按钮仅在有输入时出现、48 高圆角主按钮、居中 toast（成功绿 / 失败红）。
- * ⚠️ 未定稿（B-009）：摹客原型分别出现「8 位」「11 位」，reference 与历史稿为 12 位。
- *    页面不自持任何位数常量，位数 / 字符集 / 提示文案全部读 REDEEM_CODE_RULE，
- *    定稿时只改夹具一处。规则未定期间提交按钮只在「空输入」时禁用（照 reference syncState），
- *    不用位数提前拦截，避免把未确认的位数表现成最终校验规则。
- * 失败分支（无效 / 已使用 / 网络异常）通过 REDEEM_CODE_OUTCOMES 的确定性演示码触发，
- * 也可用 `?state=invalid` 等直达截图。
+ * 兑换码至少 10 位，不修改用户输入字符；API 模式走后台正式核兑接口。
+ * 只有 preview/dev Mock 模式使用固定演示码，API/test/prod 以后台发券回执为准。
  */
 export default function Redeem() {
   const navigate = useNavigate()
@@ -33,10 +33,25 @@ export default function Redeem() {
   const [code, setCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [outcome, setOutcome] = useState<RedeemOutcome | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [receipt, setReceipt] = useState<RedemptionReceipt | null>(null)
+  const [pendingCode, setPendingCode] = useState<string | null>(null)
+  const submissionLock = useRef(false)
+  // A full-screen in-page step must consume BrowserRouter POP/back without
+  // pushing an artificial history entry (UX-E). Submission stays protected.
+  const blocker = useBlocker(pendingCode !== null)
+  useEffect(() => {
+    if (blocker.state !== 'blocked') return
+    if (!submissionLock.current && !submitting) {
+      setPendingCode(null)
+      setErrorMessage(null)
+    }
+    blocker.reset()
+  }, [blocker, submitting])
   const timers = useRef<number[]>([])
 
-  const trimmed = code.replace(/\s/g, '')
-  const feedback = outcome ? REDEEM_FEEDBACK[outcome] : null
+  const trimmed = code
+  const feedback = errorMessage ? { ok: false, text: errorMessage } : outcome ? REDEEM_FEEDBACK[outcome] : null
   const done = outcome === 'success'
 
   /** `?state=` 直达：回填该分支的演示码并落到对应反馈，便于逐节点截图 */
@@ -44,7 +59,10 @@ export default function Redeem() {
     const key = state?.key as RedeemOutcome | undefined
     if (!key || !(key in REDEEM_SAMPLE_CODES)) return
     setCode(REDEEM_SAMPLE_CODES[key])
+    setReceipt(null)
+    setPendingCode(null)
     setOutcome(key)
+    setErrorMessage(null)
     setSubmitting(false)
   }, [state?.key])
 
@@ -55,21 +73,62 @@ export default function Redeem() {
   }
 
   const clear = () => {
+    setPendingCode(null)
+    setReceipt(null)
     setCode('')
+    setOutcome(null)
+    setErrorMessage(null)
+  }
+
+  const openProjectSelector = () => {
+    if (code.length < REDEEM_CODE_RULE.minLength || submitting) return
+    // Freeze exactly what the user entered. Searching must not alter the code.
+    setPendingCode(code)
+    setErrorMessage(null)
     setOutcome(null)
   }
 
-  const submit = () => {
-    if (!trimmed || submitting) return
+  const submit = async (projectId: number) => {
+    if (!pendingCode || pendingCode.length < REDEEM_CODE_RULE.minLength ||
+        submitting || submissionLock.current) return
+    const originalCode = pendingCode
+    submissionLock.current = true
     setOutcome(null)
+    setReceipt(null)
+    setErrorMessage(null)
     setSubmitting(true)
-    /** 提交中态：夹具环境下用固定时长模拟一次请求往返，非随机 */
-    track(() => {
+    if (runtimePolicy.dataMode === 'mock') {
+      /** Legacy preview fixture is explicitly mock-only; no real issue occurs here. */
+      track(() => {
+        const next = resolveRedeemOutcome(originalCode)
+        if (next === 'success') {
+          setOutcome('success')
+          setPendingCode(null)
+        } else {
+          setErrorMessage(REDEEM_FEEDBACK[next].text)
+        }
+        setSubmitting(false)
+        submissionLock.current = false
+      }, 700)
+      return
+    }
+    try {
+      const nextReceipt = await redeemCardCode(originalCode, projectId)
+      setReceipt(nextReceipt)
+      setPendingCode(null)
+      setOutcome('success')
+    } catch (error) {
+      if (isAppError(error) && error.kind === 'contract') {
+        setErrorMessage('兑换结果暂时无法确认，请稍后重试')
+      } else if (isAppError(error) && (error.kind === 'network' || error.kind === 'timeout')) {
+        setErrorMessage('网络异常，兑换结果可能尚未确认，请先到卡包查看')
+      } else {
+        setErrorMessage(error instanceof Error ? error.message : '兑换失败，请稍后重试')
+      }
+    } finally {
       setSubmitting(false)
-      const next = resolveRedeemOutcome(trimmed)
-      setOutcome(next)
-      if (next !== 'success') track(() => setOutcome(null), 2000)
-    }, 700)
+      submissionLock.current = false
+    }
   }
 
   if (done) {
@@ -81,6 +140,7 @@ export default function Redeem() {
           </span>
           <h1 className="text-lg font-semibold text-text-primary">兑换成功</h1>
           <p className="max-w-[260px] text-sm leading-6 text-text-secondary">{REDEEM_FEEDBACK.success.text}</p>
+          {receipt && <p className="max-w-[260px] text-sm font-medium text-text-primary">已提交卡券兑换，可前往卡包查看</p>}
         </div>
 
         <section className="mx-4 mt-5 flex items-center gap-3 rounded-container bg-surface p-3 shadow-sm">
@@ -93,6 +153,7 @@ export default function Redeem() {
           <div className="min-w-0 flex-1">
             <p className="text-xs text-text-tertiary">兑换码</p>
             <p className="mt-0.5 truncate text-base font-semibold tracking-[0.08em] text-text-primary">{trimmed}</p>
+
           </div>
         </section>
 
@@ -122,13 +183,12 @@ export default function Redeem() {
           type="text"
           inputMode="text"
           autoComplete="off"
-          autoCapitalize="characters"
           spellCheck={false}
-          maxLength={REDEEM_CODE_RULE.length}
           value={code}
           onChange={(event) => {
-            setCode(event.target.value.toUpperCase())
+            setCode(event.target.value)
             setOutcome(null)
+            setErrorMessage(null)
           }}
           placeholder="请输入兑换码"
           aria-label="兑换码"
@@ -145,18 +205,11 @@ export default function Redeem() {
 
       <button
         type="button"
-        disabled={!trimmed || submitting}
-        onClick={submit}
+        disabled={trimmed.length < REDEEM_CODE_RULE.minLength || submitting}
+        onClick={openProjectSelector}
         className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary text-base font-medium text-text-inverse active:bg-primary-pressed disabled:bg-disabled disabled:text-text-disabled"
       >
-        {submitting ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            提交中
-          </>
-        ) : (
-          '确认兑换'
-        )}
+        选择适用片区
       </button>
 
       {feedback && (
@@ -170,6 +223,21 @@ export default function Redeem() {
           {feedback.ok ? <CheckCircle2 className="h-[18px] w-[18px]" /> : <AlertCircle className="h-[18px] w-[18px]" />}
           {feedback.text}
         </div>
+      )}
+
+      {pendingCode !== null && (
+        <ProjectSelectScreen
+          mode="code"
+          code={pendingCode}
+          submitting={submitting}
+          submitError={errorMessage}
+          onClose={() => {
+            if (submitting) return
+            setPendingCode(null)
+            setErrorMessage(null)
+          }}
+          onConfirm={(projectId) => { void submit(projectId) }}
+        />
       )}
 
       <DebugPanel route={route} />

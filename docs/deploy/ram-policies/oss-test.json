@@ -1,0 +1,28 @@
+{
+  "Version": "1",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "oss:ListObjects"
+      ],
+      "Resource": "acs:oss:*:*:kbs-sdl",
+      "Condition": {
+        "StringLike": {
+          "oss:Prefix": [
+            "kbs-web/test/",
+            "kbs-web/test/*"
+          ]
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "oss:GetObject",
+        "oss:PutObject"
+      ],
+      "Resource": "acs:oss:*:*:kbs-sdl/kbs-web/test/*"
+    }
+  ]
+}

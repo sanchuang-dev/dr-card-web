@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useHumanChat } from './useHumanChat'
 import type { ChatSocketEvents } from '../../services/chatHuman'
+import { AppError } from '../../services/http'
 
 const mocks = vi.hoisted(() => ({
   token: 'user-a-token', events: null as ChatSocketEvents | null,
@@ -9,6 +10,10 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('../../services/auth/session', () => ({
   getAuthSession: () => mocks.token ? { accessToken: mocks.token } : undefined,
+  isApiSignaturePreflightError: (error: unknown) =>
+    error instanceof Error && 'code' in error &&
+    ['AUTH_SIGNATURE_CREDENTIALS_MISSING', 'AUTH_NATIVE_CREDENTIALS_INVALID',
+      'AUTH_NATIVE_CREDENTIALS_UNAVAILABLE'].includes(String(error.code)),
 }))
 vi.mock('../../services/chatHuman', () => ({
   connectChatSocket: mocks.connect,
@@ -79,6 +84,26 @@ describe('#138 human chat connection, transfer, and lifecycle', () => {
     await act(async () => { expect(await hook.result.current.transfer()).toBe(false) })
     expect(hook.result.current.active).toBe(false)
     expect(hook.result.current.error).toContain('无服务')
+    hook.unmount()
+  })
+
+  it.each([
+    'AUTH_SIGNATURE_CREDENTIALS_MISSING',
+    'AUTH_NATIVE_CREDENTIALS_INVALID',
+    'AUTH_NATIVE_CREDENTIALS_UNAVAILABLE',
+  ])('shows %s as a preflight error without an uncertain-transfer warning', async code => {
+    mocks.transfer.mockRejectedValueOnce(new AppError({
+      kind: 'contract', code, message: 'Native 登录凭据缺少 token 或 salt',
+    }))
+    const onTransferred = vi.fn()
+    const hook = renderHook(() => useHumanChat(vi.fn(), vi.fn().mockResolvedValue(true), 0, onTransferred))
+    act(() => mocks.events?.onStatus('connected'))
+    await act(async () => { expect(await hook.result.current.transfer()).toBe(false) })
+    expect(hook.result.current.active).toBe(false)
+    expect(hook.result.current.needsHistoryCheck).toBe(false)
+    expect(hook.result.current.error).toBe('Native 登录凭据缺少 token 或 salt')
+    expect(hook.result.current.canTransfer).toBe(true)
+    expect(onTransferred).not.toHaveBeenCalled()
     hook.unmount()
   })
 

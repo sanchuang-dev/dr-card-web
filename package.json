@@ -26,7 +26,7 @@
     "build:cf": "npm run typecheck && npm run verify:images && node scripts/build-h5.mjs cf",
     "preview": "vite preview --host 0.0.0.0",
     "test:e2e": "npm run test:e2e:formal",
-    "test:e2e:formal": "playwright test tests/e2e/formal-h5.spec.ts tests/e2e/uxe-exchange.spec.ts",
+    "test:e2e:formal": "playwright test tests/e2e/formal-h5.spec.ts tests/e2e/uxe-exchange.spec.ts tests/e2e/redeem-code-project-selector.spec.ts tests/e2e/card-ticket-legacy-layout.spec.ts",
     "test:e2e:bridge-lab": "playwright test tests/e2e/bridge-lab.spec.ts",
     "test:e2e:test-gate": "playwright test tests/e2e/test-gate.spec.ts",
     "test:e2e:ui": "playwright test tests/e2e/formal-h5.spec.ts --ui",

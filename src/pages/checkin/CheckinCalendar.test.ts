@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildCheckinCalendar, buildCycleDays, resolveChallengeCompletedDays } from './components/CheckinBoard'
+import { buildCheckinCalendar, buildCycleDays, buildRollingCycleDays, resolveChallengeCompletedDays, resolveWeeklyCompletedDays } from './components/CheckinBoard'
 
 const record = (id: number, createTime: string, status: number) => {
   const [year, month, day] = createTime.slice(0, 10).split('-')
@@ -169,49 +169,78 @@ describe('buildCheckinCalendar', () => {
 })
 
 
-describe('7-day challenge model', () => {
-  it('shows the previous six days plus today instead of future dates', () => {
+describe('Issue #220: natural-week model', () => {
+  it('shows Monday through Sunday with future dates, never a rolling last-seven-days window', () => {
     const days = buildCycleDays(
       [record(1, '2026-09-26 09:00:00', 10), record(2, '2026-09-27 09:00:00', 10)],
-      new Date(2026, 8, 28),
+      new Date(2026, 8, 28), // Monday
     )
-
     expect(days.map((item) => item.dateKey)).toEqual([
-      '2026-09-22',
-      '2026-09-23',
-      '2026-09-24',
-      '2026-09-25',
-      '2026-09-26',
-      '2026-09-27',
-      '2026-09-28',
+      '2026-09-28', '2026-09-29', '2026-09-30',
+      '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04',
     ])
-    expect(days.filter((item) => item.signed).map((item) => item.dateKey)).toEqual([
-      '2026-09-26',
-      '2026-09-27',
-    ])
-    expect(days[6].state).toBe('today')
+    expect(days[0].state).toBe('today')
+    expect(days.slice(1).every((item) => item.state === 'upcoming')).toBe(true)
+    expect(resolveWeeklyCompletedDays(days)).toBe(0)
   })
 
-  it('uses current consecutive-day truth and adjusts the unsigned projected value', () => {
-    const days = buildCycleDays([], new Date(2026, 8, 28))
+  it('includes seven completed days on Sunday and resets the display on Monday', () => {
+    const records = Array.from({ length: 7 }, (_, index) =>
+      record(index + 1, `2026-10-${String(5 + index).padStart(2, '0')} 09:00:00`, 10),
+    )
+    const sunday = buildCycleDays(records, new Date(2026, 9, 11))
+    expect(sunday[0].dateKey).toBe('2026-10-05')
+    expect(sunday[6].dateKey).toBe('2026-10-11')
+    expect(resolveWeeklyCompletedDays(sunday)).toBe(7)
 
-    expect(
-      resolveChallengeCompletedDays(
-        { signed: true, consecutiveDays: 5, points: 5, rewardDesc: '' },
-        days,
-      ),
-    ).toBe(5)
-    expect(
-      resolveChallengeCompletedDays(
-        { signed: false, consecutiveDays: 5, points: 5, rewardDesc: '连续签到5天' },
-        days,
-      ),
-    ).toBe(4)
-    expect(
-      resolveChallengeCompletedDays(
-        { signed: true, consecutiveDays: 99, points: 5, rewardDesc: '' },
-        days,
-      ),
-    ).toBe(7)
+    const monday = buildCycleDays(records, new Date(2026, 9, 12))
+    expect(monday[0].dateKey).toBe('2026-10-12')
+    expect(monday[6].dateKey).toBe('2026-10-18')
+    expect(resolveWeeklyCompletedDays(monday)).toBe(0)
+  })
+
+  it('keeps a cross-year natural week and counts valid makeup exactly once', () => {
+    const days = buildCycleDays(
+      [record(1, '2026-12-31 09:00:00', 20), record(2, '2027-01-01 09:00:00', 10),
+        record(3, '2026-12-31 18:00:00', 20)],
+      new Date(2027, 0, 2),
+    )
+    expect(days.map((item) => item.dateKey)).toEqual([
+      '2026-12-28', '2026-12-29', '2026-12-30', '2026-12-31',
+      '2027-01-01', '2027-01-02', '2027-01-03',
+    ])
+    expect(days[3].makeup).toBe(true)
+    expect(resolveWeeklyCompletedDays(days)).toBe(2)
+  })
+
+  it('ignores future records and includes an optimistic makeup only for a past day', () => {
+    const days = buildCycleDays(
+      [record(1, '2026-10-17 09:00:00', 10)],
+      new Date(2026, 9, 14),
+      ['2026-10-13', '2026-10-16'],
+    )
+    expect(days[1].makeupApplied).toBe(true)
+    expect(days[4].state).toBe('upcoming')
+    expect(days[5].signed).toBe(false)
+    expect(resolveWeeklyCompletedDays(days)).toBe(1)
+  })
+
+  it('does not mistake a 20-day account streak for natural-week progress', () => {
+    const days = buildCycleDays([record(1, '2026-10-12 09:00:00', 10)], new Date(2026, 9, 14))
+    expect(resolveWeeklyCompletedDays(days)).toBe(1)
+    // Old streak resolver remains exclusive to the existing /checkin Hero until #221.
+    expect(resolveChallengeCompletedDays({ signed: true, consecutiveDays: 20, points: 5, rewardDesc: '' }, days)).toBe(7)
+  })
+})
+
+describe('Issue #220: keep detail-page fallback unchanged', () => {
+  it('still shows the prior rolling 7-day streak on Monday if status is unavailable', () => {
+    const today = new Date(2026, 9, 12)
+    const lastSeven = Array.from({ length: 7 }, (_, index) => {
+      const day = new Date(2026, 9, 6 + index)
+      return record(index + 1, `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')} 09:00:00`, 10)
+    })
+    expect(resolveWeeklyCompletedDays(buildCycleDays(lastSeven, today))).toBe(1)
+    expect(resolveChallengeCompletedDays(null, buildRollingCycleDays(lastSeven, today))).toBe(7)
   })
 })

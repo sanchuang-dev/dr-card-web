@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { connectChatSocket, transferChatToHuman } from './chatHuman'
+import { AppError } from './http'
 
 const mocks = vi.hoisted(() => {
   const handlers = new Map<string, (...args: any[]) => void>()
@@ -13,16 +14,18 @@ const mocks = vi.hoisted(() => {
   }
   return {
     socket, handlers, io: vi.fn(() => socket), fetch: vi.fn(),
-    token: 'secret-token', refresh: vi.fn(),
+    token: 'secret-token', refresh: vi.fn(), signature: vi.fn(),
+    runtime: { apiBaseUrl: 'https://api.example.test/api', socketBaseUrl: null as string | null, socketPath: '/socket.io/' },
   }
 })
 vi.mock('socket.io-client', () => ({ io: mocks.io }))
 vi.mock('../app/config/runtime', () => ({
-  runtimePolicy: { apiBaseUrl: 'https://api.example.test/api', dataMode: 'api' },
+  runtimePolicy: mocks.runtime,
 }))
 vi.mock('./auth/session', () => ({
   getAuthSession: () => ({ accessToken: mocks.token }),
   refreshChatAuthAfterUnauthorized: mocks.refresh,
+  getApiSignatureCredentials: mocks.signature,
 }))
 
 beforeEach(() => {
@@ -32,16 +35,21 @@ beforeEach(() => {
   mocks.socket.io.reconnection.mockClear()
   mocks.socket.connected = false
   mocks.token = 'secret-token'
+  mocks.runtime.apiBaseUrl = 'https://api.example.test/api'
+  mocks.runtime.socketBaseUrl = null
+  mocks.runtime.socketPath = '/socket.io/'
   mocks.fetch.mockReset(); mocks.refresh.mockReset()
+  mocks.signature.mockReset().mockResolvedValue({ token: 'native-token', salt: 'test-salt' })
   vi.stubGlobal('fetch', mocks.fetch)
 })
 
 describe('#138 Socket.IO client contract', () => {
-  it('connects same-origin default namespace using auth.token, never URL/query credentials', () => {
+  it('connects the documented /socket.io namespace using auth.token and the Engine.IO transport path', () => {
     const status = vi.fn(), onMessage = vi.fn(), onConnected = vi.fn()
     const handle = connectChatSocket('secret-token', { onStatus: status, onMessage, onConnected })
-    expect(mocks.io).toHaveBeenCalledWith('https://api.example.test', expect.objectContaining({
-      auth: { token: 'secret-token' }, autoConnect: false, reconnection: true,
+    expect(mocks.io).toHaveBeenCalledWith('https://api.example.test/socket.io', expect.objectContaining({
+      auth: { token: 'Bearer secret-token' }, path: '/socket.io/', transports: ['websocket'],
+      autoConnect: false, reconnection: true,
     }))
     expect(mocks.socket.connect).toHaveBeenCalledOnce()
     mocks.socket.connected = true
@@ -63,6 +71,17 @@ describe('#138 Socket.IO client contract', () => {
     expect(handle.connected()).toBe(false)
   })
 
+
+  it('uses the documented namespace and independently configured Engine.IO path', () => {
+    mocks.runtime.socketBaseUrl = 'https://socket.example.test'
+    mocks.runtime.socketPath = '/realtime/socket.io/'
+    connectChatSocket('secret-token', { onStatus: vi.fn(), onMessage: vi.fn(), onConnected: vi.fn() })
+    expect(mocks.io).toHaveBeenCalledWith('https://socket.example.test/socket.io', expect.objectContaining({
+      path: '/realtime/socket.io/',
+      auth: { token: 'Bearer secret-token' },
+    }))
+  })
+
   it('stops reconnection on authorization error and does not leak token to callbacks', () => {
     const status = vi.fn()
     connectChatSocket('secret-token', { onStatus: status, onMessage: vi.fn(), onConnected: vi.fn() })
@@ -79,11 +98,29 @@ describe('#138 Socket.IO client contract', () => {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     await expect(transferChatToHuman()).resolves.toBeUndefined()
     const [url, request] = mocks.fetch.mock.calls[0]
-    expect(url).toBe('https://api.example.test/api/chatmessages/transfer')
+    const signedUrl = new URL(url)
+    expect(signedUrl.origin + signedUrl.pathname).toBe('https://api.example.test/api/chatmessages/transfer')
+    expect(signedUrl.searchParams.get('token')).toBe('native-token')
+    expect(signedUrl.searchParams.get('secstr')).toMatch(/^[0-9a-f]{32}$/)
+    expect(request.headers.salt).toBe('test-salt')
     expect(request.headers.Authorization).toBe('Bearer secret-token')
     expect(request.method).toBe('POST')
     expect(JSON.parse(request.body)).toEqual({})
     expect(mocks.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    'AUTH_SIGNATURE_CREDENTIALS_MISSING',
+    'AUTH_NATIVE_CREDENTIALS_INVALID',
+    'AUTH_NATIVE_CREDENTIALS_UNAVAILABLE',
+  ])('preserves %s before sending any transfer request', async code => {
+    const error = new AppError({
+      kind: 'contract', code, message: 'Native 登录凭据缺少 token 或 salt',
+    })
+    mocks.signature.mockRejectedValueOnce(error)
+    await expect(transferChatToHuman()).rejects.toBe(error)
+    expect(mocks.fetch).not.toHaveBeenCalled()
+    expect(mocks.refresh).not.toHaveBeenCalled()
   })
 
   it('does not fake transfer success on business error, network failure or invalid mode', async () => {

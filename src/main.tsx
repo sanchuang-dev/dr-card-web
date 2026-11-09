@@ -40,10 +40,14 @@ async function bootstrap() {
   /* H036：test/prod 只承载真实 API + Native Bridge，非原生宿主不进入应用。
    * 拦截发生在 React 挂载前，路由不会启动，因此不会发出任何业务请求。 */
   if (isUnsupportedHost()) {
+    const basename = import.meta.env.VITE_ROUTER_BASENAME?.replace(/\/$/, '') || ''
+    const relativePath = basename && window.location.pathname.startsWith(`${basename}/`)
+      ? window.location.pathname.slice(basename.length)
+      : window.location.pathname
     // 只有这一个纯静态公开落地页允许在微信/系统浏览器显示。
     // 其它正式 H5 路由继续严格要求 Native WebView，不启动应用 Router/业务请求。
     ReactDOM.createRoot(appRootElement).render(
-      window.location.pathname === '/buddy/invite/scan'
+      relativePath === '/buddy/invite/scan'
         ? <BuddyScanLanding />
         : <UnsupportedHostNotice />,
     )

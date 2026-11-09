@@ -1,5 +1,7 @@
 # 决策记录｜T009 卡包三态、分享与兑换码失败态
 
+> **2026-10-12 补充（D-083）**：本页下方 D-017／B-009、自动转大写、12 位等是 2026-08 的设计历史；最新正式后台协议已由用户确认，覆盖这些旧规则。当前 H5 校验至少 10 位、保持原始码（含大小写与空格）、不施加额外最大长度/字符集限制，业务成功由 `/api/cardredemptioncodes/redeem` 的真实回执决定，本地券 source=60 与第三方 MyCoupons 分别读取。详见 [最新接口合同](../../engineering/card-code-redeem-contract.md)。历史决定保留供审计，不再用于当前施工。
+
 > 决策日期：2026-08-22
 > 决策卡：[T009-wallet-redemption.md](../tasks/T009-wallet-redemption.md)
 > 决策类型：UI / Flow

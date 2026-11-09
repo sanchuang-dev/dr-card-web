@@ -2,10 +2,15 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { combineChatMessages, useAiChatSend } from './useAiChatSend'
 import type { ChatHistoryMessage } from '../../services/chatMessages'
+import { AppError } from '../../services/http'
 
 const mocks = vi.hoisted(() => ({ token: 'token-A', send: vi.fn() }))
 vi.mock('../../services/auth/session', () => ({
   getAuthSession: () => ({ accessToken: mocks.token, userInfo: null }),
+  isApiSignaturePreflightError: (error: unknown) =>
+    error instanceof Error && 'code' in error &&
+    ['AUTH_SIGNATURE_CREDENTIALS_MISSING', 'AUTH_NATIVE_CREDENTIALS_INVALID',
+      'AUTH_NATIVE_CREDENTIALS_UNAVAILABLE'].includes(String(error.code)),
 }))
 vi.mock('../../services/chatStream', () => ({ sendChatStream: mocks.send }))
 const message = (id: number, role: 'bot' | 'user' = 'bot', text = '回复'): ChatHistoryMessage => ({
@@ -75,6 +80,29 @@ describe('#137 AI stream UI state machine', () => {
     expect(hook.result.current.error).toContain('检查聊天历史')
     expect(hook.result.current.messages.map(m => m.role)).toEqual(['bot'])
     expect(hook.result.current.messages[0]?.text).toBe('尚未落库')
+    hook.unmount()
+  })
+
+  it.each([
+    'AUTH_SIGNATURE_CREDENTIALS_MISSING',
+    'AUTH_NATIVE_CREDENTIALS_INVALID',
+    'AUTH_NATIVE_CREDENTIALS_UNAVAILABLE',
+  ])('marks unsent user bubble failed on %s without claiming delivery', async code => {
+    mocks.send.mockRejectedValueOnce(new AppError({
+      kind: 'contract', code, message: 'Native 签名凭据不可用',
+    }))
+    const sync = vi.fn()
+    const hook = renderHook(() => useAiChatSend(sync))
+    await act(async () => {
+      expect(await hook.result.current.send('未发出去的消息', [])).toBe(false)
+    })
+    expect(hook.result.current.phase).toBe('failed')
+    expect(hook.result.current.error).toBe('Native 签名凭据不可用')
+    expect(hook.result.current.messages).toEqual([
+      expect.objectContaining({ role: 'user', text: '未发出去的消息', status: 'failed' }),
+    ])
+    expect(sync).not.toHaveBeenCalled()
+    expect(mocks.send).toHaveBeenCalledTimes(1)
     hook.unmount()
   })
 

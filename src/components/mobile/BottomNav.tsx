@@ -93,7 +93,7 @@ export default function BottomNav({ variant = 'main' }: { variant?: 'main' | 'le
     if (!getNativeBridgeDiagnostics().capabilities.scanCode) return
 
     try {
-      await scanCode({ scanType: 'all' })
+      await scanCode({ scanType: 'qr' })
     } catch {
       // 扫码取消 / 失败 / 超时均静默回落到当前页，不新增反馈链路。
     }

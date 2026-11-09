@@ -47,6 +47,15 @@ describe('live user detail contract', () => {
     })
   })
 
+  it('exposes the optional account ID for a PIN mask without returning the password', async () => {
+    mocks.request.mockResolvedValue({
+      code: 0, data: { id: 5, nick_name: '示例', student_grade: '研一', birthday: null },
+    })
+    const detail = await fetchUserProfileDetail()
+    expect(detail.userId).toBe(5)
+    expect(detail).not.toHaveProperty('consume_password')
+  })
+
   it('prefers the persisted student_grade when membership grade differs', async () => {
     mocks.request.mockResolvedValue({
       code: 0,
@@ -235,6 +244,13 @@ describe('user update contract', () => {
     expect(absent.pinConfigured).toBeUndefined()
   })
 
+  it('preserves a null birthday as an editable empty date, without inventing PIN support', async () => {
+    mocks.request.mockResolvedValue({ code: 0, data: { nick_name: '会员', student_grade: '', birthday: null } })
+    await expect(fetchUserProfileDetail()).resolves.toMatchObject({ birthday: '' })
+    const result = await fetchUserProfileDetail()
+    expect(result.pinConfigured).toBeUndefined()
+  })
+
   it('rejects success-code responses that silently discard a birthday edit', async () => {
     mocks.request.mockResolvedValue({
       code: 0, data: { id: 5, nick_name: '示例', gender: '1', points: 0 },
@@ -242,17 +258,21 @@ describe('user update contract', () => {
     await expect(updateUserProfile({ birthday: '2001-02-03' })).rejects.toThrow('生日未保存')
   })
 
-  it('requires an acknowledgement for a PIN change, not a bare code zero', async () => {
-    mocks.request.mockResolvedValueOnce({
+  it('sends a PIN to the existing update endpoint when status is omitted', async () => {
+    mocks.request.mockResolvedValue({
       code: 0, data: { id: 5, nick_name: '示例', gender: '1', points: 0 },
-    }).mockResolvedValueOnce({
-      code: 0, data: { id: 5, nick_name: '示例', gender: '1', points: 0, consume_password_set: true },
     })
-    await expect(updateUserProfile({ consume_password: '123456' })).rejects.toThrow('未确认保存')
-    await expect(updateUserProfile({ consume_password: '123456' })).resolves.toMatchObject({ consume_password_set: true })
-    expect(mocks.request).toHaveBeenLastCalledWith({
+    await expect(updateUserProfile({ consume_password: '123456' })).resolves.toMatchObject({ id: 5 })
+    expect(mocks.request).toHaveBeenCalledWith({
       method: 'POST', url: '/api/user/update', data: { consume_password: '123456' },
     })
+  })
+
+  it('treats a code-zero response as successful without a second PIN-status gate', async () => {
+    mocks.request.mockResolvedValue({
+      code: 0, data: { id: 5, nick_name: '示例', gender: '1', points: 0, consume_password_set: false },
+    })
+    await expect(updateUserProfile({ consume_password: '123456' })).resolves.toMatchObject({ id: 5 })
   })
 
   it('surfaces the backend message when validation fails', async () => {

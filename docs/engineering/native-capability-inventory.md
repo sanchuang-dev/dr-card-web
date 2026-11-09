@@ -33,9 +33,9 @@ window.webkit.messageHandlers.getAuthorizationInfo.postMessage({})
 
 本次共读取路由注册表 87 条：
 
-- active formal H5：**39 条**，全部纳入扫描；
+- active formal H5：**39 条**，全部纳入本次扫描；
 - Native reference：**45 条**，排除；
-- deferred formal H5：**3 条商城路由**，排除；
+- deferred formal H5：当时为 **3 条商城路由**，排除；后续 `/mall` 主入口已转为 active，商品详情与购物车仍 deferred。
 - `/__debug/bridge-lab`、`/tokens` 等调试/工程路由不属于产品路由扫描面。
 
 ### 2.1 本次扫描的 39 条 active formal H5
@@ -86,7 +86,7 @@ window.webkit.messageHandlers.getAuthorizationInfo.postMessage({})
 
 - `/legacy-home*`、`/legacy-service*`、`/legacy-profile*`；
 - 当前 `/device/*`、`/vending/*`、`/signin*` Native reference；
-- `/mall`、`/mall/goods/:id`、`/mall/cart`：当前商城 deferred；
+- `/mall`：当前为 active formal-H5 iframe + SSO 容器，但不是本次 Native capability inventory 的扫码/宿主能力征集对象；`/mall/goods/:id`、`/mall/cart` 仍 deferred；
 - 健康管理、数字空间、搭子默契值等原型已明确暂缓内容；
 - Bridge Lab Raw Probe：只用于探测宿主，不自动形成 production capability。
 
@@ -185,7 +185,7 @@ H028 只征集真实能力，不改变当前页面行为。
 - 消费密码输入、昵称/生日/年级表单：纯 H5 交互。
 - H5 内二维码占位图：展示二维码本身不等于扫码能力。
 - Native reference 页面中出现的扫码、相册、设备等能力：不纳入本 H028 formal H5 征集范围。
-- 商城：当前 deferred，不借 H028 偷偷转正。
+- 商城 iframe + SSO 属正式 H5 集成但不属于本次 Native capability inventory 的宿主能力征集范围；本清单不据此推断或确认任何 Native 能力。
 
 ## 6. Native 团队回填模板
 
@@ -235,7 +235,7 @@ iOS:
 - 以真实源码/原型边界识别 9 类宿主/设备能力需求；
 - 覆盖 Issue #46 指定的关闭 WebView、扫码、拍照、相册选图、保存图片/海报、剪贴板、激励广告、登录凭证、APP 唤起/应用商店边界；
 - 明确区分 Android/iOS 已确认鉴权事实、其余未确认协议、历史 debug 证据和候选实现方式；
-- 明确排除 Native reference、商城 deferred 与无需宿主能力的 H5 行为；
+- 明确排除 Native reference、商城 SSO 集成与无需宿主能力的 H5 行为；
 - 给出可直接交给 Native 团队回填的字段模板；
 - 未新增或虚构任何未知 Native 方法名、callback 名或 payload schema。
 

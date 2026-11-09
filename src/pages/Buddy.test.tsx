@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 const mocks = vi.hoisted(() => ({
@@ -34,11 +34,27 @@ describe('buddy list backend truth', () => {
     expect(screen.getByLabelText('我的洗头搭子')).toBeTruthy()
   })
 
+  it('keeps refresh as a light inline action in the buddy section header', async () => {
+    mocks.list.mockResolvedValue([{ id: 'server-1', nickname: 'HuangChao', avatarUrl: null }])
+    mount()
+    await waitFor(() => expect(screen.getByText('HuangChao')).toBeTruthy())
+    const toolbar = screen.getByLabelText('搭子列表操作')
+    expect(within(toolbar).getByRole('heading', { name: '我的搭子' })).toBeTruthy()
+    const refresh = within(toolbar).getByRole('button', { name: '刷新搭子列表' })
+    expect(refresh.textContent).toBe('刷新')
+    expect(refresh.className).toContain('bg-transparent')
+    expect(refresh.classList.contains('border')).toBe(false)
+    expect(toolbar.nextElementSibling?.getAttribute('aria-label')).toBe('我的洗头搭子')
+    expect(screen.getAllByRole('button', { name: '刷新搭子列表' })).toHaveLength(1)
+  })
+
   it('treats server empty relations as an actual empty state', async () => {
     mocks.list.mockResolvedValue([])
     mount()
     await waitFor(() => expect(screen.getByText('还没有洗头搭子噢～')).toBeTruthy())
     expect(screen.queryByText('小美')).toBeNull()
+    expect(screen.getByLabelText('搭子列表操作')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '刷新搭子列表' })).toBeTruthy()
   })
 
   it('refreshes real list after an accepted relation without local fixtures', async () => {
@@ -70,6 +86,7 @@ describe('buddy list backend truth', () => {
     mount()
     expect(screen.getByText('演示搭子资料，非真实账号关系')).toBeTruthy()
     expect(screen.getByText('小美')).toBeTruthy()
+    expect(screen.queryByLabelText('搭子列表操作')).toBeNull()
     expect(mocks.list).not.toHaveBeenCalled()
   })
 })

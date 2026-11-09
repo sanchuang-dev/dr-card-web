@@ -1,30 +1,51 @@
 import { runtimePolicy } from '../../app/config/runtime'
 import { getLoginToken } from '../nativeBridge'
-import { createContractError } from '../http/appError'
+import { createContractError, isAppError, type AppError } from '../http/appError'
 import { STORAGE_KEYS, storage } from '../../storage'
+import type { ApiSignatureCredentials } from '../http/apiSignature'
 import {
   createHttpClient,
   setHttpAuthFailureHandler,
   setHttpAuthHeadersProvider,
+  setHttpSignatureCredentialsProvider,
   setHttpUnauthorizedHandler,
 } from '../http/httpClient'
 
 const AUTH_FAILURE_EVENT = 'dr-card-ui:auth-failure'
+const AUTH_EXPIRED_EVENT = 'dr-card-ui:auth-expired'
 const LOGIN_PATH = '/api/oauth/login'
+
+export interface NewUserPopup {
+  title: string
+  description: string
+  points?: number | string
+}
 
 export interface AuthSession {
   userInfo: unknown
   accessToken: string
+  is_new_user?: boolean
+  popup?: NewUserPopup
 }
 
-interface LoginResponse {
-  userInfo: unknown
-  accessToken: string
-}
+interface LoginResponse extends AuthSession {}
 
 interface LoginEnvelope {
   code?: unknown
   data?: unknown
+  is_new_user?: unknown
+  popup?: unknown
+}
+
+const DEFAULT_NEW_USER_POPUP: NewUserPopup = {
+  title: '欢迎加入卡博士',
+  description: '恭喜成为卡博士新用户，欢迎开启卡博士体验。',
+}
+
+/** Build a visible first-entry notice from the new-user flag, even without optional popup copy. */
+export function getNewUserPopup(session: AuthSession | undefined): NewUserPopup | null {
+  if (session?.is_new_user !== true) return null
+  return session.popup ?? DEFAULT_NEW_USER_POPUP
 }
 
 const loginClient = createHttpClient({
@@ -33,14 +54,18 @@ const loginClient = createHttpClient({
 })
 
 let inFlightLogin: Promise<AuthSession> | undefined
+let initialBootstrap: Promise<AuthSession> | undefined
 let authFlowEnabled = false
 let initializedForDocument = false
 let volatileSession: AuthSession | undefined
+// Native upstream credentials never enter sessionStorage, URLs outside /api, or logs.
+let signatureCredentials: ApiSignatureCredentials | undefined
 
 function readSession(): AuthSession | undefined {
   const value = storage.read(STORAGE_KEYS.authSession)
   if (value && value.accessToken.trim()) {
-    return { userInfo: volatileSession?.userInfo ?? null, accessToken: value.accessToken }
+    if (volatileSession?.accessToken === value.accessToken) return volatileSession
+    return { userInfo: null, accessToken: value.accessToken }
   }
   return volatileSession
 }
@@ -53,6 +78,7 @@ function writeSession(session: AuthSession) {
 
 export function clearAuthSession() {
   volatileSession = undefined
+  signatureCredentials = undefined
   storage.remove(STORAGE_KEYS.authSession)
   if (typeof window !== 'undefined') window.dispatchEvent(new Event('dr-card-ui:auth-session-cleared'))
 }
@@ -65,7 +91,7 @@ export function setAuthFlowEnabled(enabled: boolean) {
   authFlowEnabled = enabled && runtimePolicy.dataMode === 'api'
 }
 
-/** Accept the confirmed backend envelope without weakening the login contract. */
+/** Accept the confirmed backend envelope and preserve new-user metadata at either envelope level. */
 export function parseLoginResponse(result: unknown): LoginResponse {
   if (!result || typeof result !== 'object') {
     throw createContractError('登录接口返回格式无效', { code: 'AUTH_LOGIN_RESPONSE_INVALID' })
@@ -86,7 +112,37 @@ export function parseLoginResponse(result: unknown): LoginResponse {
     })
   }
 
-  return { userInfo: payload.userInfo, accessToken: payload.accessToken }
+  // Some API gateways wrap userInfo/accessToken in data but leave extension fields
+  // (is_new_user/popup) on the outer response. Prefer data when both are present.
+  const isNewUser = typeof payload.is_new_user === 'boolean'
+    ? payload.is_new_user
+    : response.is_new_user
+  const popupValue = payload.popup ?? response.popup
+  const popup = popupValue && typeof popupValue === 'object' ? popupValue as Partial<NewUserPopup> : undefined
+  const hasPopupContent = Boolean(
+    (typeof popup?.title === 'string' && popup.title.trim()) ||
+    (typeof popup?.description === 'string' && popup.description.trim()) ||
+    typeof popup?.points === 'number' ||
+    typeof popup?.points === 'string',
+  )
+  const validPopup = hasPopupContent
+    ? {
+        title: typeof popup?.title === 'string' && popup.title.trim() ? popup.title : DEFAULT_NEW_USER_POPUP.title,
+        description: typeof popup?.description === 'string' && popup.description.trim()
+          ? popup.description
+          : DEFAULT_NEW_USER_POPUP.description,
+        ...(typeof popup?.points === 'number' || typeof popup?.points === 'string'
+          ? { points: popup.points }
+          : {}),
+      }
+    : undefined
+
+  return {
+    userInfo: payload.userInfo,
+    accessToken: payload.accessToken,
+    ...(typeof isNewUser === 'boolean' ? { is_new_user: isNewUser } : {}),
+    ...(validPopup ? { popup: validPopup } : {}),
+  }
 }
 
 async function loginFromNative(): Promise<AuthSession> {
@@ -102,9 +158,11 @@ async function loginFromNative(): Promise<AuthSession> {
     url: LOGIN_PATH,
     data: { salt: credentials.salt, token: credentials.token },
     skipAuth: true,
+    signatureCredentials: { token: credentials.token, salt: credentials.salt },
   })
 
   const session = parseLoginResponse(result)
+  signatureCredentials = { token: credentials.token, salt: credentials.salt }
   writeSession(session)
   return session
 }
@@ -112,7 +170,7 @@ async function loginFromNative(): Promise<AuthSession> {
 export function authenticate(force = false): Promise<AuthSession> {
   if (!force) {
     const current = readSession()
-    if (current) return Promise.resolve(current)
+    if (current && signatureCredentials) return Promise.resolve(current)
   }
   if (inFlightLogin) return inFlightLogin
 
@@ -123,11 +181,39 @@ export function authenticate(force = false): Promise<AuthSession> {
   return inFlightLogin
 }
 
+function isUnauthorizedAuthError(error: unknown) {
+  return isAppError(error) && error.status === 401
+}
+
+function dispatchAuthEvent(eventName: string) {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(eventName))
+}
+
+async function authenticateInitialDocument(): Promise<AuthSession> {
+  try {
+    return await authenticate(true)
+  } catch (error) {
+    if (!isUnauthorizedAuthError(error)) throw error
+  }
+
+  try {
+    return await authenticate(true)
+  } catch (error) {
+    clearAuthSession()
+    if (isUnauthorizedAuthError(error)) dispatchAuthEvent(AUTH_EXPIRED_EVENT)
+    throw error
+  }
+}
+
 export function bootstrapAuthSession(): Promise<AuthSession> {
   if (!initializedForDocument) {
     initializedForDocument = true
-    return authenticate(true)
+    initialBootstrap = authenticateInitialDocument().finally(() => {
+      initialBootstrap = undefined
+    })
+    return initialBootstrap
   }
+  if (initialBootstrap) return initialBootstrap
   return authenticate()
 }
 
@@ -136,7 +222,9 @@ async function reauthenticateAfterUnauthorized() {
     await authenticate(true)
   } catch (error) {
     clearAuthSession()
-    if (typeof window !== 'undefined') window.dispatchEvent(new Event(AUTH_FAILURE_EVENT))
+    dispatchAuthEvent(
+      isUnauthorizedAuthError(error) ? AUTH_EXPIRED_EVENT : AUTH_FAILURE_EVENT,
+    )
     throw error
   }
 }
@@ -147,8 +235,44 @@ export async function refreshChatAuthAfterUnauthorized(): Promise<void> {
   if (authFlowEnabled) await reauthenticateAfterUnauthorized()
 }
 
+/** Obtain the upstream Native token/salt for independent SSE and HTTP transports.
+ * A restored accessToken requires re-reading the Native bridge before signing. */
+export async function getApiSignatureCredentials(): Promise<ApiSignatureCredentials> {
+  if (signatureCredentials) return signatureCredentials
+  if (!readSession()) {
+    throw createContractError('未建立签名会话', { code: 'AUTH_SIGNATURE_CREDENTIALS_MISSING' })
+  }
+  // Bridge failures happen before the HTTP request; preserve that distinction.
+  let native: Awaited<ReturnType<typeof getLoginToken>>
+  try {
+    native = await getLoginToken()
+  } catch {
+    throw createContractError('无法取得 Native 签名凭据，请检查 App 登录状态', {
+      code: 'AUTH_NATIVE_CREDENTIALS_UNAVAILABLE',
+    })
+  }
+  if (!native.token.trim() || !native.salt?.trim()) {
+    throw createContractError('Native 登录凭据缺少 token 或 salt', {
+      code: 'AUTH_NATIVE_CREDENTIALS_INVALID',
+    })
+  }
+  signatureCredentials = { token: native.token, salt: native.salt }
+  return signatureCredentials
+}
+
+/** Only these failures certify that signing stopped before HTTP transport. */
+export function isApiSignaturePreflightError(error: unknown): error is AppError {
+  return isAppError(error) &&
+    (error.code === 'AUTH_SIGNATURE_CREDENTIALS_MISSING' ||
+      error.code === 'AUTH_NATIVE_CREDENTIALS_INVALID' ||
+      error.code === 'AUTH_NATIVE_CREDENTIALS_UNAVAILABLE')
+}
+
+setHttpSignatureCredentialsProvider(getApiSignatureCredentials)
+
 setHttpAuthHeadersProvider(() => {
-  if (!authFlowEnabled) return undefined
+  // Route-level authFlowEnabled controls reauthentication/expiry UI, not credential attachment.
+  // Any same-origin API request with an existing session must carry its Bearer token.
   const session = readSession()
   return session ? { Authorization: `Bearer ${session.accessToken}` } : undefined
 })
@@ -156,10 +280,10 @@ setHttpUnauthorizedHandler(() => {
   if (authFlowEnabled) return reauthenticateAfterUnauthorized()
 })
 setHttpAuthFailureHandler(() => {
-  if (authFlowEnabled && typeof window !== 'undefined') {
+  if (authFlowEnabled) {
     clearAuthSession()
-    window.dispatchEvent(new Event(AUTH_FAILURE_EVENT))
+    dispatchAuthEvent(AUTH_EXPIRED_EVENT)
   }
 })
 
-export { AUTH_FAILURE_EVENT }
+export { AUTH_EXPIRED_EVENT, AUTH_FAILURE_EVENT }

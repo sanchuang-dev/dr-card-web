@@ -1,6 +1,6 @@
 # 卡博士 H5 分支与发布节奏
 
-`dr-card-ui` 已从高保真 UI 工程进入正式 **App 内嵌 H5 前端**阶段。长期分支固定为：
+`dr-card-web` 已从高保真 UI 工程进入正式 **App 内嵌 H5 前端**阶段（npm 包名暂保留为 `dr-card-ui`）。长期分支固定为：
 
 ```text
 preview → dev → test → prod

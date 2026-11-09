@@ -23,6 +23,7 @@ try {
     acceptBuddyPhoneInvitation,
   } = await vite.ssrLoadModule('/src/services/buddyPhone.ts')
   const { redeemExchangeProduct } = await vite.ssrLoadModule('/src/services/exchange.ts')
+  const { fetchCouponProjects } = await vite.ssrLoadModule('/src/services/couponProjects.ts')
   const { AppError } = await vite.ssrLoadModule('/src/services/http/appError.ts')
   const {
     H014_BUDDY_PHONE_SCENARIOS,
@@ -77,7 +78,13 @@ try {
   assert.equal((await searchBuddyByPhone(H014_BUDDY_PHONE_SCENARIOS.incoming)).outcome, 'already-buddies')
   assert.equal(await acceptBuddyPhoneInvitation(incoming.invitationId), 'already-buddies')
 
-  await redeemExchangeProduct('e1')
+  const projects = await fetchCouponProjects('', 1)
+  assert.equal(projects.per_page, 15)
+  assert.equal(projects.data.length, 15)
+  const matches = await fetchCouponProjects('南沙', 1)
+  assert.ok(matches.data.length > 0)
+  assert.ok(matches.data.every(project => project.shop_name.includes('南沙')))
+  assert.deepEqual(await redeemExchangeProduct(1, projects.data[0].id), { couponId: 1, points: 1080 })
 
   const buddyPageSource = fs.readFileSync('src/pages/BuddyPhoneInvite.tsx', 'utf8')
   assert.doesNotMatch(buddyPageSource, /setTimeout|resolveBuddyPhoneOutcome|markPhoneInvited/)
@@ -94,7 +101,7 @@ try {
   assert.doesNotMatch(exchangeServiceSource, /runtimePolicy|VITE_DATA_MODE|mockScenario/)
 
   console.log(
-    'H014 PASS: BuddyPhoneInvite and Exchange use service → HTTP → MSW; buddy success/empty/business error/4xx/5xx/slow/network failure and invite state progression are deterministic.',
+    'H014 PASS: BuddyPhoneInvite keeps deterministic H014 scenarios; Exchange uses its production /api/coupons/exchange contract through service → HTTP → MSW.',
   )
 } finally {
   mockServer?.close()

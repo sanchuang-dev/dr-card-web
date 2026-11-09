@@ -9,6 +9,8 @@
 html {
   background-color: var(--color-background);
   background-image: var(--gradient-app-background);
+  /* Keep normal page scrolling but disable document-level pinch zoom in mobile WebViews. */
+  touch-action: pan-x pan-y;
 }
 
 /* H020：关闭浏览器默认 root snapshot。原生 View Transition 只允许显式命名的 H5 route content 参与。 */

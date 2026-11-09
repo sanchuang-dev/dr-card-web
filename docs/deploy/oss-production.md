@@ -2,7 +2,7 @@
 
 ## 事实与边界
 
-- 前端仓库：`dangjingtao/dr-card-ui`。
+- 前端仓库：`sanchuang-dev/dr-card-web`。
 - OSS Bucket：`kbs-sdl`，地域：`cn-guangzhou`，API Endpoint：`https://oss-cn-guangzhou.aliyuncs.com`。
 - 构建：`npm run build:prod`，构建产物：`dist/`。
 - 发布来源：仅 `prod` 分支。晋级沿用 `preview → dev → test → prod`，不得跳级。

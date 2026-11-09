@@ -111,7 +111,7 @@ jobs:
           grep -F '"dataMode":"mock"' /tmp/cf-auto-build.txt
           grep -F '"apiBaseConfigured":false' /tmp/cf-auto-build.txt
 
-          CF_PAGES_BRANCH=test CF_PAGES_COMMIT_SHA="$GITHUB_SHA" VITE_API_BASE_URL=http://example.invalid VITE_BUDDY_PUBLIC_ORIGIN=https://test.dr-card-ui.pages.dev node scripts/build-h5.mjs cf --dry-run | tee /tmp/cf-test-build.txt
+          CF_PAGES_BRANCH=test CF_PAGES_COMMIT_SHA="$GITHUB_SHA" VITE_API_BASE_URL=http://example.invalid VITE_BUDDY_PUBLIC_ORIGIN=https://kbs.3cgroup.cn node scripts/build-h5.mjs cf --dry-run | tee /tmp/cf-test-build.txt
           grep -F '"appEnvironment":"test"' /tmp/cf-test-build.txt
           grep -F '"dataMode":"api"' /tmp/cf-test-build.txt
           grep -F '"bridgeMode":"native"' /tmp/cf-test-build.txt
@@ -194,13 +194,12 @@ jobs:
       - name: Build test bundle
         env:
           VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
-          # CI build fixture; actual Pages deployments must configure their own official origin.
-          VITE_BUDDY_PUBLIC_ORIGIN: https://test.dr-card-ui.pages.dev
         run: npm run build:test
 
       - name: Verify test build identity
         run: |
-          node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('dist/build-meta.json','utf8'));if(m.appEnvironment!=='test'||m.dataMode!=='api'||m.bridgeMode!=='native'||m.apiBaseConfigured!==true)process.exit(1)"
+          node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('dist/build-meta.json','utf8'));if(m.appEnvironment!=='test'||m.dataMode!=='api'||m.bridgeMode!=='native'||m.apiBaseConfigured!==true||m.buddyPublicOriginConfigured!==true)process.exit(1)"
+          node -e "const fs=require('fs');const files=fs.readdirSync('dist/assets').filter(x=>x.endsWith('.js'));if(!files.some(x=>fs.readFileSync('dist/assets/'+x,'utf8').includes('https://kbs.3cgroup.cn')))process.exit(1)"
           test ! -f dist/mockServiceWorker.js
 
       - name: Reject Mock in production-like builds
@@ -281,7 +280,6 @@ jobs:
       VITE_APP_ENV: test
       VITE_DATA_MODE: api
       VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
-      VITE_BUDDY_PUBLIC_ORIGIN: https://test.dr-card-ui.pages.dev
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -308,7 +306,8 @@ jobs:
 
       - name: Verify test bundle identity
         run: |
-          node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('dist/build-meta.json','utf8'));if(m.appEnvironment!=='test'||m.dataMode!=='api'||m.bridgeMode!=='native'||m.apiBaseConfigured!==true)process.exit(1)"
+          node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('dist/build-meta.json','utf8'));if(m.appEnvironment!=='test'||m.dataMode!=='api'||m.bridgeMode!=='native'||m.apiBaseConfigured!==true||m.buddyPublicOriginConfigured!==true)process.exit(1)"
+          node -e "const fs=require('fs');const files=fs.readdirSync('dist/assets').filter(x=>x.endsWith('.js'));if(!files.some(x=>fs.readFileSync('dist/assets/'+x,'utf8').includes('https://kbs.3cgroup.cn')))process.exit(1)"
 
       - name: Verify test bundle has no Mock Service Worker asset
         shell: bash

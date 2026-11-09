@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   Navigate,
   Outlet,
@@ -7,16 +7,21 @@ import {
   useNavigationType,
   useViewTransitionState,
 } from 'react-router-dom'
-import { Bell, MessageSquare, Settings } from 'lucide-react'
+import { Settings, UserRound } from 'lucide-react'
 import BottomNav from '../components/mobile/BottomNav'
 import TitleBar from '../components/mobile/TitleBar'
+import NotificationBell from '../components/mobile/NotificationBell'
 import { findRouteByPathname, isLegacyTabPath } from '../app/router/routes'
 import { getRouteScope, isActiveFormalH5Route, isFormalH5TabPath } from '../app/router/routeScope'
 import { navigateWithH5ViewTransition } from '../app/router/h5Transition'
-import { useNotifications } from '../app/state/notifications'
+import { refreshRemoteUnreadCount, useNotifications } from '../app/state/notifications'
 import { protectedFixtureRedirect, useOverlay } from '../app/fixtures/useFixture'
 import H5ScrollRestoration from '../components/mobile/H5ScrollRestoration'
-import { AUTH_FAILURE_EVENT, setAuthFlowEnabled } from '../services/auth/session'
+import MallWebView from '../pages/MallWebView'
+import Toast from '../components/ui/Toast'
+import { closeWebView, NativeBridgeError } from '../services/nativeBridge'
+import { hasPreviousRouterEntry } from '../app/router/history'
+import { AUTH_EXPIRED_EVENT, AUTH_FAILURE_EVENT, setAuthFlowEnabled } from '../services/auth/session'
 
 type H5RouteTransitionKind = 'none' | 'tab' | 'forward' | 'back'
 
@@ -77,6 +82,10 @@ function H5RouteOutlet() {
     }
   }, [nativeTransitionActive, navigationKind])
 
+  // Keep the real mall mounted at the shell level; its iframe is rendered separately below.
+  // The route outlet must not mount a second MallWebView while /mall is active.
+  if (location.pathname === '/mall') return null
+
   return (
     <div
       key={location.pathname}
@@ -108,9 +117,15 @@ export default function MobileLayout() {
   const location = useLocation()
   const navigate = useNavigate()
   const previousShellPathname = useRef(location.pathname)
+  const previousNoticePathname = useRef(location.pathname)
   const scrollSourcePathname = previousShellPathname.current
   const { unreadCount, countLoaded } = useNotifications()
   const { open: openOverlay } = useOverlay()
+  const [authExpired, setAuthExpired] = useState(false)
+  const [backFeedback, setBackFeedback] = useState<string | null>(null)
+  // Do not initialize the cross-origin mall until the user first enters its tab.
+  const [mallActivated, setMallActivated] = useState(() => location.pathname === '/mall')
+  const authExpiredHandledRef = useRef(false)
   const showLegacyNav = isLegacyTabPath(location.pathname)
   const showNav = showLegacyNav || isFormalH5TabPath(location.pathname)
   const route = findRouteByPathname(location.pathname)
@@ -122,12 +137,31 @@ export default function MobileLayout() {
     if (!activeFormalH5) return
 
     const handleAuthFailure = () => navigate('/error?reason=auth', { replace: true })
+    const handleAuthExpired = () => {
+      if (authExpiredHandledRef.current) return
+      authExpiredHandledRef.current = true
+      setAuthExpired(true)
+      window.setTimeout(() => {
+        void closeWebView().catch((error) => {
+          console.error('[auth-expired-close]', error)
+        })
+      }, 800)
+    }
+
     window.addEventListener(AUTH_FAILURE_EVENT, handleAuthFailure)
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
     return () => {
       window.removeEventListener(AUTH_FAILURE_EVENT, handleAuthFailure)
+      window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
       setAuthFlowEnabled(false)
     }
   }, [activeFormalH5, navigate])
+
+  useEffect(() => {
+    if (!backFeedback) return
+    const timeoutId = window.setTimeout(() => setBackFeedback(null), 2600)
+    return () => window.clearTimeout(timeoutId)
+  }, [backFeedback])
 
   const fixtureRedirect = activeFormalH5 ? protectedFixtureRedirect(location) : null
   const titleBarMode = route?.titleBar ?? 'back'
@@ -147,8 +181,20 @@ export default function MobileLayout() {
   const isNotificationsPage = location.pathname === '/notifications'
   const allNotificationsRead = countLoaded && unreadCount === 0
 
+  // The shared notice hook fetches on initial mount/focus. Refresh only when returning
+  // to the member-center tab, avoiding a duplicate request on the first render.
+  useEffect(() => {
+    const enteringProfile = previousNoticePathname.current !== '/profile' && location.pathname === '/profile'
+    previousNoticePathname.current = location.pathname
+    if (enteringProfile) void refreshRemoteUnreadCount()
+  }, [location.pathname])
+
   useLayoutEffect(() => {
     previousShellPathname.current = location.pathname
+  }, [location.pathname])
+
+  useLayoutEffect(() => {
+    if (location.pathname === '/mall') setMallActivated(true)
   }, [location.pathname])
 
   if (fixtureRedirect) {
@@ -164,19 +210,32 @@ export default function MobileLayout() {
     navigate(target)
   }
 
-  const openMarkAllRead = () => {
-    openOverlay('clear')
+  const handleActiveFormalH5Back = () => {
+    // React Router's BrowserHistory `idx` counts H5-managed entries. The initial OSS loader
+    // replace leaves it at zero; only a real previous H5 route should receive navigate(-1).
+    if (hasPreviousRouterEntry(window.history.state)) {
+      navigate(-1)
+      return
+    }
+
+    void closeWebView().catch((error: unknown) => {
+      console.error('[h5-shell-back]', error)
+      if (error instanceof NativeBridgeError) {
+        if (error.code === 'bridge-disabled') {
+          setBackFeedback('当前环境未启用原生关闭能力')
+        } else if (error.code === 'bridge-unsupported' || error.code === 'capability-unsupported') {
+          setBackFeedback('当前 App 版本暂不支持关闭页面')
+        } else {
+          setBackFeedback('关闭页面失败，请稍后重试')
+        }
+        return
+      }
+      setBackFeedback('关闭页面失败，请稍后重试')
+    })
   }
 
-  const openWecom = () => {
-    navigate(
-      {
-        pathname: location.pathname,
-        search: location.search,
-        hash: '#wecom',
-      },
-      { replace: true, state: location.state },
-    )
+  const openMarkAllRead = () => {
+    openOverlay('clear')
   }
 
   const titleAction = isNotificationsPage
@@ -190,6 +249,18 @@ export default function MobileLayout() {
         {allNotificationsRead ? '全部已读' : '一键已读'}
       </button>
     )
+    : location.pathname === '/service/chat'
+      ? (
+        <button
+          type="button"
+          aria-label="福利官二维码"
+          title="福利官二维码"
+          onClick={() => navigate({ pathname: location.pathname, search: location.search, hash: '#wecom' }, { replace: true, state: location.state })}
+          className="flex h-10 w-10 items-center justify-center rounded-full text-text-primary active:bg-[rgba(89,55,15,0.06)]"
+        >
+          <UserRound className="h-[21px] w-[21px]" aria-hidden />
+        </button>
+      )
     : route?.titleBarAction === 'settings'
       ? (
         <button type="button" aria-label="设置" onClick={() => navigateShell('/settings')} className="flex h-9 w-9 items-center justify-center rounded-full text-text-primary active:bg-[rgba(89,55,15,0.06)]">
@@ -198,49 +269,70 @@ export default function MobileLayout() {
       )
       : route?.titleBarAction === 'notifications'
         ? (
-          <button type="button" aria-label="通知" onClick={() => navigateShell('/notifications')} className="flex h-9 w-9 items-center justify-center rounded-full text-text-primary active:bg-[rgba(89,55,15,0.06)]">
-            <Bell className="h-[22px] w-[22px]" />
-          </button>
+          <NotificationBell
+            unreadCount={unreadCount}
+            countLoaded={countLoaded}
+            showBadge={location.pathname === '/profile'}
+            onClick={() => navigateShell('/notifications')}
+          />
         )
-        : location.pathname === '/service/chat'
-          ? (
-            /* T013R5+R6：「企微客服」pill 回到壳层 TitleBar 右侧（与「< 智能客服」同右侧）；
-              * H016：hash 只表示当前页弹层状态，使用 replace 避免新增历史项和触发页面级滚动/过渡。
-              * T013R6：pill 不限制宽度、whitespace-nowrap，保证「企微客服」四个字自然横向不被换行或裁剪。 */
-            <button
-              type="button"
-              data-chat-wecom-entry
-              onClick={openWecom}
-              className="inline-flex min-h-9 items-center gap-1 whitespace-nowrap rounded-pill bg-surface px-3 text-[13px] font-medium text-text-brand shadow-sm active:bg-surface-selected"
-            >
-              <MessageSquare className="h-3.5 w-3.5" aria-hidden />
-              企微客服
-            </button>
-          )
-          : undefined
+        : undefined
 
   return (
-    <div className="app-background flex h-dvh flex-col overflow-hidden pt-[env(safe-area-inset-top)] text-text-primary">
-      {/* T013R7：min-w-0 防止 TitleBar 第三列 action 被撑大撑出页面右侧 */}
-      <div className="min-w-0 shrink-0">
-        {titleBarMode !== 'hidden' && (
-          <TitleBar
-            title={title}
-            leadingAction={leadingAction}
-            onBack={route?.backTo ? () => navigateShell(route.backTo as string) : undefined}
-            action={titleAction}
-            actionWide={isNotificationsPage || location.pathname === '/service/chat'}
-            fullWidth={activeFormalH5}
-          />
-        )}
+    <>
+      {authExpired && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-24 z-[100] flex justify-center px-6">
+          <Toast message="用户信息过期" />
+        </div>
+      )}
+      {backFeedback && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-24 z-[101] flex justify-center px-6">
+          <Toast message={backFeedback} status="danger" />
+        </div>
+      )}
+      <div className="app-background flex h-screen supports-[height:100dvh]:h-dvh flex-col overflow-hidden pt-[env(safe-area-inset-top)] text-text-primary">
+        {/* T013R7：min-w-0 防止 TitleBar 第三列 action 被撑大撑出页面右侧 */}
+        <div className="min-w-0 shrink-0">
+          {titleBarMode !== 'hidden' && (
+            <TitleBar
+              title={title}
+              leadingAction={leadingAction}
+              onBack={
+                route?.backTo
+                  ? () => navigateShell(route.backTo as string)
+                  : activeFormalH5
+                    ? handleActiveFormalH5Back
+                    : undefined
+              }
+              action={titleAction}
+              actionWide={isNotificationsPage}
+              fullWidth={activeFormalH5}
+            />
+          )}
+        </div>
+        <div className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain" data-page-scroll>
+          {isActiveFormalH5Route(route) && (
+            <H5ScrollRestoration previousPathname={scrollSourcePathname} />
+          )}
+          <H5RouteOutlet />
+          {/* Mount on first entry while visible, then preserve the iframe's layout viewport off-tab. */}
+          {mallActivated && (
+            <div
+              className={
+                location.pathname === '/mall'
+                  ? 'absolute inset-0 z-10 bg-background'
+                  : 'invisible pointer-events-none absolute inset-0 z-0'
+              }
+              data-mall-shell="true"
+              data-h5-route-active={location.pathname === '/mall' ? 'true' : 'false'}
+              aria-hidden={location.pathname !== '/mall'}
+            >
+              <MallWebView />
+            </div>
+          )}
+        </div>
+        {showNav && <BottomNav variant={showLegacyNav ? 'legacy' : 'main'} />}
       </div>
-      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain" data-page-scroll>
-        {isActiveFormalH5Route(route) && (
-          <H5ScrollRestoration previousPathname={scrollSourcePathname} />
-        )}
-        <H5RouteOutlet />
-      </div>
-      {showNav && <BottomNav variant={showLegacyNav ? 'legacy' : 'main'} />}
-    </div>
+    </>
   )
 }

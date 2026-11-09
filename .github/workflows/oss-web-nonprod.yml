@@ -1,0 +1,147 @@
+name: OSS Web Nonproduction
+
+on:
+  pull_request:
+    branches: [preview, dev, test]
+  push:
+    branches: [preview, dev, test]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oss-web-nonprod-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  package-check:
+    name: Check fixed OSS paths (no cloud credentials)
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    env:
+      # Placeholders are used solely for static CI packaging, never deployment.
+      VITE_API_BASE_URL: https://api.example.invalid
+      VITE_BUDDY_PUBLIC_ORIGIN: https://h5.example.invalid
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Test OSS fixed-path artifacts for each stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            targets=(ui dev test prod)
+          else
+            case "$GITHUB_REF_NAME" in
+              preview) targets=(ui) ;;
+              dev) targets=(dev) ;;
+              test) targets=(test) ;;
+              *) echo "::error::Unsupported branch" ; exit 1 ;;
+            esac
+          fi
+          for target in "${targets[@]}"; do
+            case "$target" in
+              ui) mode=preview ;;
+              dev|test|prod) mode="$target" ;;
+              *) exit 1 ;;
+            esac
+            echo "::group::OSS $target fixed-path package"
+            H5_OSS_ARTIFACT=1 OSS_WEB_TARGET="$target" node scripts/build-h5.mjs "$mode"
+            node scripts/verify-oss-web-package.mjs "$target"
+            echo "::endgroup::"
+          done
+      - name: Verify OSS target safety, including no production jump
+        shell: bash
+        run: |
+          set -euo pipefail
+          if H5_OSS_ARTIFACT=1 OSS_WEB_TARGET=prod node scripts/build-h5.mjs dev --dry-run; then
+            echo "::error::OSS target mismatch was accepted"
+            exit 1
+          fi
+          if OSS_WEB_TARGET=ui node scripts/build-h5.mjs preview --dry-run; then
+            echo "::error::OSS fixed-path build accepted without explicit OSS packaging"
+            exit 1
+          fi
+          if H5_OSS_ARTIFACT=1 OSS_WEB_TARGET=ui CF_PAGES_BRANCH=preview node scripts/build-h5.mjs cf --dry-run; then
+            echo "::error::Cloudflare build accepted OSS path override"
+            exit 1
+          fi
+
+  deploy:
+    name: Publish fixed nonprod OSS path
+    # Publish is attempted on branch push; a missing environment credential
+    # is a visible failure, not a silently skipped deployment.
+    if: github.event_name == 'push' && (github.ref_name == 'preview' || github.ref_name == 'dev' || github.ref_name == 'test')
+    needs: package-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Repository-level OSS credentials may publish the guarded nonproduction prefixes.
+    # Environment-level secrets can still override them later for stricter RAM isolation.
+    environment:
+      name: oss-${{ github.ref_name == 'preview' && 'ui' || github.ref_name }}
+    env:
+      OSS_REGION: cn-guangzhou
+      OSS_ENDPOINT: https://oss-cn-guangzhou.aliyuncs.com
+      OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+      OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+      # The test Buddy QR origin is read from the checked-in .env.test file.
+      # Do not inject an empty OSS_PUBLIC_ORIGIN variable over that mode config.
+      VITE_API_BASE_URL: ${{ vars.OSS_API_BASE_URL }}
+      OSS_WEB_TARGET: ${{ github.ref_name == 'preview' && 'ui' || github.ref_name }}
+      H5_OSS_ARTIFACT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Require OSS credentials and guarded branch/target pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OSS_ACCESS_KEY_ID" || { echo "::error::oss-$OSS_WEB_TARGET missing OSS_ACCESS_KEY_ID"; exit 1; }
+          test -n "$OSS_ACCESS_KEY_SECRET" || { echo "::error::oss-$OSS_WEB_TARGET missing OSS_ACCESS_KEY_SECRET"; exit 1; }
+          case "$GITHUB_REF_NAME:$OSS_WEB_TARGET" in
+            preview:ui|dev:dev|test:test) ;;
+            *) echo "::error::Wrong branch/target pair"; exit 1 ;;
+          esac
+      - run: npm ci --no-audit --no-fund
+      - name: Build and verify environment-specific web package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mode="$OSS_WEB_TARGET"
+          if [[ "$mode" == "ui" ]]; then mode=preview; fi
+          node scripts/build-h5.mjs "$mode"
+          node scripts/verify-oss-web-package.mjs "$OSS_WEB_TARGET"
+          if [[ "$OSS_WEB_TARGET" == "test" ]]; then
+            node -e "const fs=require('fs');const files=fs.readdirSync('dist/assets').filter(x=>x.endsWith('.js'));if(!files.some(x=>fs.readFileSync('dist/assets/'+x,'utf8').includes('https://kbs.3cgroup.cn')))process.exit(1)"
+          fi
+          test ! "$OSS_WEB_TARGET" = "prod"
+      - name: Install official ossutil (pinned SHA256)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --output /tmp/ossutil.zip \
+            https://gosspublic.alicdn.com/ossutil/v2/2.4.0/ossutil-2.4.0-linux-amd64.zip
+          echo "85edf66b2fb7238f5c7e25cab820cf29312319fe4935b7c86a6b8485eb434f3c  /tmp/ossutil.zip" | sha256sum -c -
+          unzip -q /tmp/ossutil.zip -d /tmp/ossutil-install
+          sudo install -m 755 /tmp/ossutil-install/ossutil-2.4.0-linux-amd64/ossutil /usr/local/bin/ossutil
+          ossutil version
+      - name: Publish assets first, verified entry last (no deletes)
+        run: node scripts/deploy-oss-web-nonprod.mjs "$OSS_WEB_TARGET"
+      - name: Write fixed entry details
+        shell: bash
+        run: |
+          {
+            echo "### Nonproduction OSS publish"
+            echo "Branch: \`$GITHUB_REF_NAME\` · target: \`$OSS_WEB_TARGET\`"
+            echo "OSS: \`oss://kbs-sdl/kbs-web/$OSS_WEB_TARGET/\`"
+            echo "Source: \`$GITHUB_SHA\` · Run: \`$GITHUB_RUN_ID.$GITHUB_RUN_ATTEMPT\`"
+            echo "All package bytes read back from OSS. The index is uploaded last; no keys were deleted."
+            echo "API/origin readiness, public domain, SPA fallback and App WebView remain separate acceptance items."
+          } >> "$GITHUB_STEP_SUMMARY"

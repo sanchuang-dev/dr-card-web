@@ -1,6 +1,7 @@
 import { runtimePolicy } from '../app/config/runtime'
-import { bootstrapAuthSession, getAuthSession, refreshChatAuthAfterUnauthorized } from './auth/session'
+import { bootstrapAuthSession, getApiSignatureCredentials, getAuthSession, refreshChatAuthAfterUnauthorized } from './auth/session'
 import { AppError, createBusinessError, createContractError } from './http'
+import { signCardApiUrl } from './http/apiSignature'
 import { ChatSseDecoder, type ChatSseFrame } from './chatSse'
 
 export const CHAT_ADD_PATH = '/api/chatmessages/add'
@@ -58,14 +59,23 @@ export async function sendChatStream(content: string, options: ChatStreamOptions
     if (controller.signal.aborted) throw new AppError({ kind: 'cancelled', message: '客服发送已取消' })
     window.addEventListener('dr-card-ui:auth-session-changed', onSessionChange)
     window.addEventListener('dr-card-ui:auth-session-cleared', onSessionChange)
-    const response = await fetch(base.replace(/\/+$/, '').replace(/\/api$/, '') + CHAT_ADD_PATH, {
+    const body = { content: message, msg_type: 1 }
+    const credentials = await getApiSignatureCredentials()
+    // Native credential resolution may complete after cancellation or account switch.
+    if (controller.signal.aborted || getAuthSession()?.accessToken !== authToken) {
+      throw new AppError({ kind: 'cancelled', message: '客服发送已取消或账号已变化' })
+    }
+    const url = signCardApiUrl(base.replace(/\/+$/, '').replace(/\/api$/, '') + CHAT_ADD_PATH,
+      undefined, body, credentials)
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${authToken}`,
+        salt: credentials.salt,
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
       },
-      body: JSON.stringify({ content: message, msg_type: 1 }),
+      body: JSON.stringify(body),
       signal: controller.signal,
       credentials: 'omit',
     })
