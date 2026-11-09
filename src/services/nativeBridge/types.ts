@@ -31,7 +31,14 @@ export interface NativeScanCodeInput {
 }
 
 export interface NativeScanCodeResult {
+  /** Original recognized QR/barcode text. */
   code: string
+  /** Native-reported scan mode, when the host includes it. */
+  scanType?: NativeScanType
+  /** Explicit false is required before H5 may dispatch a non-device QR on Android. */
+  isDevice?: boolean
+  /** Android device category when supplied by the Native-owned device detail flow. */
+  consumeUse?: string
 }
 
 export interface NativeTakePhotoInput {
