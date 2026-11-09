@@ -2,8 +2,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 
+type ScanResult = {
+  code: string
+  scanType?: 'qr' | 'bar' | 'all'
+  isDevice?: boolean
+  consumeUse?: string
+}
+
 const bridgeMocks = vi.hoisted(() => ({
-  scanCode: vi.fn(() => Promise.resolve({ code: 'SAMPLE' })),
+  scanCode: vi.fn<() => Promise<ScanResult>>(() => Promise.resolve({ code: 'SAMPLE' })),
   getNativeBridgeDiagnostics: vi.fn(),
   getNativeHost: vi.fn(() => 'android'),
 }))
@@ -132,7 +139,7 @@ describe('BottomNav middle scan item', () => {
       consumeUse: '11',
     })
     fireEvent.click(button)
-    await waitFor(() => expect(button).not.toBeDisabled())
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
     expect(bridgeMocks.scanCode).toHaveBeenCalledTimes(1)
     expect(currentPath()).toBe('/')
     expect(screen.queryByText('暂不支持此二维码')).toBeNull()
@@ -193,7 +200,8 @@ describe('BottomNav middle scan item', () => {
     renderNav()
     fireEvent.click(screen.getByRole('button', { name: '扫码' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('请允许相机权限后重试')
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('请允许相机权限后重试')
     expect(currentPath()).toBe('/')
   })
 
