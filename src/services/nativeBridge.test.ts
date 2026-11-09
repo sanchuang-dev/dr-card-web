@@ -460,6 +460,7 @@ describe('JSBridge capability runtime', () => {
     expect(getNativeBridgeDiagnostics().capabilities.scanCode).toBe(true)
     await expect(scanCode({ scanType: 'all' })).resolves.toEqual({
       code: 'QR-ANDROID-001',
+      scanType: 'qr',
     })
     expect(received).toEqual([
       {

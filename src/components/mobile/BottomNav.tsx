@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { BottomNavigation } from '../ui'
+import { BottomNavigation, Toast } from '../ui'
 import { LEGACY_TAB_ITEMS } from '../../app/router/routes'
 import { FORMAL_H5_TAB_ROUTES } from '../../app/router/routeScope'
-import { getNativeBridgeDiagnostics, scanCode } from '../../services/nativeBridge'
+import {
+  getNativeBridgeDiagnostics,
+  getNativeHost,
+  NativeBridgeError,
+  scanCode,
+} from '../../services/nativeBridge'
+import {
+  getNativeScanUnsupportedMessage,
+  resolveNativeScanDestination,
+} from '../../services/nativeScanRouting'
 
 // 主入口只消费 formal-H5 Tab 路由；Native reference 使用独立 legacy 导航。
 const mainItems = FORMAL_H5_TAB_ROUTES.flatMap((route) =>
@@ -35,6 +44,12 @@ const SCAN_TAB_PATH = mainItems.find((item) => item.fab)?.value
 // App WebView 可能晚于 React 首屏注入 Bridge；首屏做有限探测，避免浏览器预览永久轮询。
 const BRIDGE_DISCOVERY_INTERVAL_MS = 500
 const BRIDGE_DISCOVERY_MAX_ATTEMPTS = 20
+const SCAN_FEEDBACK_DURATION_MS = 2_600
+
+type ScanFeedback = {
+  message: string
+  status: 'info' | 'warning' | 'danger'
+}
 
 export default function BottomNav({ variant = 'main' }: { variant?: 'main' | 'legacy' }) {
   const location = useLocation()
@@ -42,10 +57,17 @@ export default function BottomNav({ variant = 'main' }: { variant?: 'main' | 'le
   const isLegacy = variant === 'legacy'
   const items = isLegacy ? legacyItems : mainItems
 
-  // 中间扫码项的可调用性只由 Bridge 诊断决定：浏览器 / 未注入宿主下必须不可用。
   const [scanSupported, setScanSupported] = useState(
     () => getNativeBridgeDiagnostics().capabilities.scanCode,
   )
+  const [scanInProgress, setScanInProgress] = useState(false)
+  const [scanFeedback, setScanFeedback] = useState<ScanFeedback | null>(null)
+
+  useEffect(() => {
+    if (!scanFeedback) return
+    const timer = window.setTimeout(() => setScanFeedback(null), SCAN_FEEDBACK_DURATION_MS)
+    return () => window.clearTimeout(timer)
+  }, [scanFeedback])
 
   useEffect(() => {
     if (isLegacy || scanSupported) return
@@ -89,15 +111,61 @@ export default function BottomNav({ variant = 'main' }: { variant?: 'main' | 'le
       )?.value ?? '/')
 
   const handleScan = useCallback(async () => {
-    // 浏览器 / 当前 App 版本未注入 scanCode 时保持不可用，不臆造 Web camera fallback。
-    if (!getNativeBridgeDiagnostics().capabilities.scanCode) return
+    if (!getNativeBridgeDiagnostics().capabilities.scanCode || scanInProgress) return
 
+    setScanInProgress(true)
+    setScanFeedback(null)
     try {
-      await scanCode({ scanType: 'qr' })
-    } catch {
-      // 扫码取消 / 失败 / 超时均静默回落到当前页，不新增反馈链路。
+      const result = await scanCode({ scanType: 'qr' })
+      const destination = resolveNativeScanDestination(
+        result,
+        getNativeHost(),
+        import.meta.env.VITE_BUDDY_PUBLIC_ORIGIN,
+      )
+
+      if (destination.kind === 'buddy') {
+        navigate('/buddy/accept', {
+          state: {
+            buddyScan: {
+              source: 'native-buddy-recognition',
+              raw: destination.raw,
+            },
+          },
+        })
+        return
+      }
+
+      if (destination.kind === 'unsupported') {
+        setScanFeedback({
+          message: getNativeScanUnsupportedMessage(destination.reason),
+          status: 'warning',
+        })
+        return
+      }
+
+      const state = {
+        nativeScanCode: destination.code,
+        ...(destination.nativeTransactionComplete ? { nativeVerifyResult: 'done' as const } : {}),
+      }
+      navigate('/card/verify/confirm', {
+        replace: destination.nativeTransactionComplete,
+        state,
+      })
+    } catch (error) {
+      if (error instanceof NativeBridgeError && error.code === 'native-cancelled') {
+        setScanFeedback({ message: '已取消扫码', status: 'info' })
+      } else if (error instanceof NativeBridgeError && error.code === 'native-permission-denied') {
+        setScanFeedback({ message: '请允许相机权限后重试', status: 'warning' })
+      } else if (error instanceof NativeBridgeError &&
+        (error.code === 'bridge-unsupported' || error.code === 'capability-unsupported')) {
+        setScanFeedback({ message: '当前 App 版本暂不支持扫码', status: 'warning' })
+      } else {
+        setScanFeedback({ message: '扫码失败，请重试', status: 'danger' })
+      }
+    } finally {
+      setScanInProgress(false)
     }
-  }, [])
+  }, [navigate, scanInProgress])
 
   const handleChange = (value: string) => {
     if (isLegacy) {
@@ -122,15 +190,22 @@ export default function BottomNav({ variant = 'main' }: { variant?: 'main' | 'le
   const renderedItems = isLegacy
     ? items
     : items.map((item) =>
-        item.value === SCAN_TAB_PATH ? { ...item, disabled: !scanSupported } : item,
+        item.value === SCAN_TAB_PATH ? { ...item, disabled: !scanSupported || scanInProgress } : item,
       )
 
   return (
-    <BottomNavigation
-      items={renderedItems}
-      value={active}
-      onChange={handleChange}
-      className={`relative z-40 w-full shrink-0 ${isLegacy ? 'mx-auto max-w-legacy-shell' : ''}`}
-    />
+    <>
+      <BottomNavigation
+        items={renderedItems}
+        value={active}
+        onChange={handleChange}
+        className={`relative z-40 w-full shrink-0 ${isLegacy ? 'mx-auto max-w-legacy-shell' : ''}`}
+      />
+      {scanFeedback && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-[60] flex justify-center px-4">
+          <Toast message={scanFeedback.message} status={scanFeedback.status} />
+        </div>
+      )}
+    </>
   )
 }

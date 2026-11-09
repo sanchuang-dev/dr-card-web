@@ -42,6 +42,7 @@ afterEach(() => {
   mocks.getNativeHost.mockReset()
   mocks.getNativeHost.mockReturnValue('browser')
   mocks.closeWebView.mockClear()
+  vi.unstubAllEnvs()
 })
 
 describe('ScanVerify', () => {
@@ -147,6 +148,46 @@ describe('ScanVerify', () => {
         state: expect.objectContaining({ nativeVerifyResult: 'done' }),
       }),
     )
+  })
+
+  it('routes a recognized non-device buddy QR to the existing BuddyAccept page', async () => {
+    const raw = 'https://kbs.3cgroup.cn/buddy/invite/scan?code=550e8400-e29b-41d4-a716-446655440000'
+    vi.stubEnv('VITE_BUDDY_PUBLIC_ORIGIN', 'https://kbs.3cgroup.cn')
+    mocks.getNativeHost.mockReturnValue('android')
+    mocks.getNativeBridgeDiagnostics.mockReturnValue({
+      capabilities: { scanCode: true, closeWebView: false },
+    })
+    mocks.scanCode.mockResolvedValue({ code: raw, scanType: 'qr', isDevice: false })
+
+    render(<ScanVerify />)
+    fireEvent.click(screen.getByRole('button', { name: '开始扫码核销' }))
+
+    await waitFor(() => {
+      expect(mocks.navigate).toHaveBeenCalledWith('/buddy/accept', {
+        replace: true,
+        state: { buddyScan: { source: 'native-buddy-recognition', raw } },
+      })
+    })
+  })
+
+  it('rejects an unknown non-device QR without entering device verification', async () => {
+    mocks.getNativeHost.mockReturnValue('android')
+    mocks.getNativeBridgeDiagnostics.mockReturnValue({
+      capabilities: { scanCode: true, closeWebView: false },
+    })
+    mocks.scanCode.mockResolvedValue({
+      code: 'https://example.com/unknown',
+      scanType: 'qr',
+      isDevice: false,
+    })
+
+    render(<ScanVerify />)
+    fireEvent.click(screen.getByRole('button', { name: '开始扫码核销' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('暂不支持此二维码，请扫描设备码或洗头搭子邀请二维码')).toBeTruthy()
+    })
+    expect(mocks.navigate).not.toHaveBeenCalled()
   })
 
   it('keeps an unknown Native failure on the scan page', async () => {
