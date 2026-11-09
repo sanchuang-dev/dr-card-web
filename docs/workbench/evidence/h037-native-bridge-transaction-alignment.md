@@ -277,3 +277,18 @@ completed | closed | failed | no_fill
 - [ ] Android 真机 smoke 后补运行证据；
 - [ ] iOS 未有实证前保持“待验证”。
 
+
+
+## 2026-11-09｜E-H037-A06 Android non-device QR callback observed in App WebView
+
+A user-provided Android App WebView Bridge Lab capture shows:
+
+- callback endpoint: `window.androidBridgeCallback(callbackId, payload)`;
+- `pendingMatched: true` for the active scan invocation;
+- first callback count: 1;
+- envelope: `code: 0`, `message: "ok"`;
+- payload data contains `text`, `scanType: "qr"`, and `isDevice: false`.
+
+The screenshot's `terminal: false` is the then-current H5 diagnostic classification, not a field in the Native payload. The H5 classifier had not yet learned to treat the explicit non-device flag as recognition completion. PR #293 adds that distinction: non-device recognition settles immediately; device transactions retain the existing same-callbackId two-stage wait. The QR text and UUID are intentionally omitted from this evidence record.
+
+This capture is evidence for the non-device branch only. It does not prove the device/coupon path, iOS parity, or the complete buddy relationship transaction.

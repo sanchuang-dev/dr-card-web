@@ -307,3 +307,14 @@ H5 只消费 Native 最终结果。
 - 对应自动化回归；
 - H031 / H033 / Bridge 契约事实更新；
 - Android 真机联调记录。
+
+
+## 2026-11-09｜Android QR classification addendum
+
+A current Android App WebView Bridge Lab capture supplied by the user shows that the first successful scan callback can include `data.isDevice`, alongside `data.text` and `data.scanType`. This refines the earlier blanket rule that every first successful text callback must remain pending:
+
+- `code=0` with non-empty `data.text` and `data.isDevice === false`: recognition-only result; H5 settles on the first callback and performs its own strict code dispatch.
+- `data.isDevice === true`: preserve the Native-owned device transaction; the first successful callback remains intermediate and H5 waits for the terminal callback with the same callbackId.
+- `isDevice` absent: retain the legacy Android two-stage fallback rather than guessing that the result is a buddy invitation.
+
+The capture confirms the non-device branch only. It does not establish iOS parity or replace the separate device/coupon real-flow regression. This is an H5 adapter update; no Native source change is requested.
