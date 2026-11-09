@@ -60,7 +60,7 @@ describe('scanCode Android H037 transaction contract', () => {
       data: { text: 'DEVICE-QR-001', scanType: 'qr' },
     })
 
-    await expect(promise).resolves.toEqual({ code: 'DEVICE-QR-001' })
+    await expect(promise).resolves.toEqual({ code: 'DEVICE-QR-001', scanType: 'qr' })
   })
 
   it('settles a non-device QR from the first recognition callback and preserves classification', async () => {
