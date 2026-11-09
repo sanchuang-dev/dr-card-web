@@ -48,7 +48,7 @@ export default function ScanVerify() {
 
     try {
       const host = getNativeHost()
-      const result = await scanCode({ scanType: 'all' })
+      const result = await scanCode({ scanType: 'qr' })
 
       if (host === 'android') {
         const state: ScanVerifyNavigationState = {
@@ -86,7 +86,7 @@ export default function ScanVerify() {
     ? '当前 App 版本暂不支持扫码'
     : scanning
       ? '正在调用系统扫码…'
-      : error ?? '将二维码 / 条形码对准扫描框，点击开始扫码'
+      : error ?? '将二维码对准扫描框，点击开始扫码'
 
   return (
     <div className="relative min-h-full bg-black text-white">

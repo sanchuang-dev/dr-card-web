@@ -111,7 +111,7 @@ describe('ScanVerify', () => {
     fireEvent.click(screen.getByRole('button', { name: '开始扫码核销' }))
 
     await waitFor(() => {
-      expect(mocks.scanCode).toHaveBeenCalledWith({ scanType: 'all' })
+      expect(mocks.scanCode).toHaveBeenCalledWith({ scanType: 'qr' })
     })
     expect(mocks.navigate).toHaveBeenCalledWith('/card/verify/confirm', {
       replace: true,
@@ -140,6 +140,7 @@ describe('ScanVerify', () => {
         state: { nativeScanCode: 'IOS-SCAN-CODE' },
       })
     })
+    expect(mocks.scanCode).toHaveBeenCalledWith({ scanType: 'qr' })
     expect(mocks.navigate).not.toHaveBeenCalledWith(
       '/card/verify/confirm',
       expect.objectContaining({
