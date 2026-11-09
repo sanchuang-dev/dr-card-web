@@ -422,7 +422,7 @@ describe('JSBridge capability runtime', () => {
   })
 
 
-  it('correlates Android scanCode through androidBridgeCallback', async () => {
+  it('correlates Android scanCode through androidBridgeCallback and settles one non-device result', async () => {
     const { scanCode, getNativeBridgeDiagnostics } = await loadBridge()
     const received: Array<{ scanType: string; callbackId: string }> = []
     const androidBridge = {
@@ -434,22 +434,14 @@ describe('JSBridge capability runtime', () => {
         }
         received.push(request)
         queueMicrotask(() => {
-          // H037: first success is scan recognition only; the same callbackId remains pending.
+          // Android feat/1109 marks non-device recognition explicitly and returns once.
           bridgeWindow.androidBridgeCallback?.(request.callbackId, {
             code: 0,
             message: 'ok',
             data: {
               text: 'QR-ANDROID-001',
               scanType: 'qr',
-            },
-          })
-          // Native returns control to H5 only after the device transaction finishes.
-          bridgeWindow.androidBridgeCallback?.(request.callbackId, {
-            code: 0,
-            message: 'ok',
-            data: {
-              text: 'QR-ANDROID-001',
-              scanType: 'qr',
+              isDevice: false,
             },
           })
         })
@@ -460,6 +452,8 @@ describe('JSBridge capability runtime', () => {
     expect(getNativeBridgeDiagnostics().capabilities.scanCode).toBe(true)
     await expect(scanCode({ scanType: 'all' })).resolves.toEqual({
       code: 'QR-ANDROID-001',
+      scanType: 'qr',
+      isDevice: false,
     })
     expect(received).toEqual([
       {
@@ -469,7 +463,7 @@ describe('JSBridge capability runtime', () => {
     ])
   })
 
-  it('supports qr/bar/all scanType values on iOS without changing the field name', async () => {
+    it('supports qr/bar/all scanType values on iOS without changing the field name', async () => {
     const { scanCode } = await loadBridge()
     const received: Array<{ scanType: string; callbackId: string }> = []
     bridgeWindow.iosBridge = {
