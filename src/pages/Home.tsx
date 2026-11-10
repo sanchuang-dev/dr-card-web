@@ -15,6 +15,8 @@ import { useSignRecords } from './checkin/useCheckinFeed'
 import { SIGN_RECORDS_RANGE_WEEK } from '../services/signrecords'
 import UserAvatar from '../components/mobile/UserAvatar'
 import { useUserIdentity } from './profile/useUserIdentity'
+import { runtimePolicy } from '../app/config/runtime'
+import { MALL_SEARCH_TAB_ROUTE } from '../app/router/mallSearch'
 
 const sectionIcons = {
   cause: Heart,
@@ -85,26 +87,26 @@ export default function Home() {
   return (
     <PageContainer className="pb-24 pt-4" inset={false}>
       <section className="mx-4 flex items-center gap-2" aria-label="搜索与用户入口">
-        {/* 临时调试入口（需移除）：原「返回卡博士首页」按钮临时改跳 Bridge Lab，
-         * 便于在 App WebView 内直接进入 /__debug/bridge-lab?osType=Android。
-         * 调试结束后恢复 onClick={() => navigate('/legacy-home')} 与原 aria-label。 */}
+        {/* 调试入口仅出现在支持 Bridge Lab 的构建，正式环境隐藏。 */}
+        {runtimePolicy.bridgeLabEnabled && (
+          <button
+            type="button"
+            aria-label="打开 Bridge Lab（临时调试入口）"
+            onClick={() => navigate('/__debug/bridge-lab?osType=Android')}
+            className="flex h-10 w-10 flex-none items-center justify-center rounded-full border border-border-subtle bg-surface text-text-primary active:bg-surface-secondary"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+        )}
         <button
           type="button"
-          aria-label="打开 Bridge Lab（临时调试入口）"
-          onClick={() => navigate('/__debug/bridge-lab?osType=Android')}
-          className="flex h-10 w-10 flex-none items-center justify-center rounded-full border border-border-subtle bg-surface text-text-primary active:bg-surface-secondary"
+          aria-label="搜索商品"
+          onClick={() => navigate(MALL_SEARCH_TAB_ROUTE)}
+          className="flex h-10 flex-1 items-center gap-2 rounded-full border border-border-subtle bg-surface px-3 text-left text-text-tertiary active:bg-surface-secondary"
         >
-          <ChevronLeft className="h-5 w-5" />
+          <Search className="h-4 w-4 flex-none" aria-hidden />
+          <span className="min-w-0 flex-1 truncate text-sm">搜索你想要的商品</span>
         </button>
-        <label className="flex h-10 flex-1 items-center gap-2 rounded-full border border-border-subtle bg-surface px-3 text-text-tertiary">
-          <Search className="h-4 w-4" />
-          <input
-            type="search"
-            placeholder="搜索你想要的商品"
-            aria-label="搜索商品"
-            className="min-w-0 flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-tertiary"
-          />
-        </label>
         {/* T046｜右上角头像由「跳商城」改为「跳专栏内会员中心」（B-048 路由 slug：/dearseed/membership） */}
         <button
           type="button"
