@@ -53,6 +53,9 @@ describe('buddy QR image and poster encoding', () => {
     const poster = await createBuddyPoster(png, { demo: true })
     expect(requestedSrc).toBe(png)
     expect(context.drawImage).toHaveBeenCalledWith(expect.any(MockImage), 160, 335, 640, 640)
+    expect(context.fillText).toHaveBeenCalledWith('极地种子 · 洗头搭子', 480, 175, 870)
+    expect(context.fillText).toHaveBeenCalledWith('请在卡博士 App 内使用「极地种子扫一扫」', 480, 1045, 870)
+    expect(context.fillText.mock.calls.some(([text]) => String(text).includes('诗得丽'))).toBe(false)
     expect(context.fillText).toHaveBeenCalledWith(expect.stringContaining('演示二维码'), 480, 1166, 870)
     expect(poster).toEqual({
       imageType: 'base64',

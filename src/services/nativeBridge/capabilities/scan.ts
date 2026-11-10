@@ -27,6 +27,17 @@ function validateInput(input: NativeScanCodeInput): NativeScanCodeInput {
   return input
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+/**
+ * Normalize Android's current callback envelope while retaining the H5 adapter's
+ * legacy one-shot { code: string } result shape. This parser does not imply that
+ * iOS currently exposes a Native scanCode implementation.
+ */
 function parseResult(payload: unknown): NativeScanCodeResult {
   let parsed: unknown
   try {
@@ -35,51 +46,46 @@ function parseResult(payload: unknown): NativeScanCodeResult {
     if (error instanceof NativeTransportError && error.code !== 'payload-invalid') throw error
     parsed = parseJsonPayload(payload)
   }
-  const data = parsed !== null && typeof parsed === 'object'
-    ? (parsed as { data?: unknown }).data
-    : undefined
-  const code = typeof (parsed as { code?: unknown })?.code === 'string'
-    ? (parsed as { code: string }).code
-    : data !== null && typeof data === 'object'
-      ? (data as { text?: unknown }).text
-      : undefined
-  const nativeCode = (parsed as { code?: unknown })?.code
-  if (typeof nativeCode === 'number' && nativeCode !== 0) {
-    const errorCode = nativeCode === 1 ? 'native-cancelled' : nativeCode === 2 || nativeCode === 3 ? 'native-permission-denied' : 'native-failed'
-    throw new NativeTransportError(errorCode, 'Native scanCode reported ' + (parsed as { message?: string }).message)
-  }
-  if (typeof code !== 'string' || !code) {
+
+  const envelope = asRecord(parsed)
+  if (!envelope) {
     throw new NativeTransportError(
       'payload-invalid',
-      'Native scanCode() result must be a JSON string with a string code field.',
+      'Native scanCode() result must be a JSON object.',
     )
   }
 
-  return { code }
-}
+  const data = asRecord(envelope.data)
+  const nativeCode = envelope.code
+  if (typeof nativeCode === 'number' && nativeCode !== 0) {
+    const errorCode =
+      nativeCode === 1
+        ? 'native-cancelled'
+        : nativeCode === 2 || nativeCode === 3
+          ? 'native-permission-denied'
+          : 'native-failed'
+    const message = typeof envelope.message === 'string' && envelope.message
+      ? envelope.message
+      : 'Native scanCode reported failure.'
+    throw new NativeTransportError(errorCode, message)
+  }
 
-function isAndroidScanTerminalPayload(payload: unknown, callbackCount: number): boolean {
-  // Current Android H5 voucher verification is a two-stage Native-owned transaction:
-  // 1) scanner recognized a code, 2) device start/dispense finished. Only the second success
-  // callback is terminal. A first-stage failure/cancel/permission result still settles immediately.
-  if (callbackCount > 1) return true
+  const code = typeof nativeCode === 'string' && nativeCode.length > 0
+    ? nativeCode
+    : data?.text
+  if (typeof code !== 'string' || code.length === 0) {
+    throw new NativeTransportError(
+      'payload-invalid',
+      'Native scanCode() result must contain a non-empty QR text.',
+    )
+  }
 
-  try {
-    const parsed = parseJsonPayload<unknown>(payload)
-    if (parsed === null || typeof parsed !== 'object') return true
-    if ('error' in parsed) return true
-
-    const nativeCode = (parsed as { code?: unknown }).code
-    const data = (parsed as { data?: unknown }).data
-    const text =
-      data !== null && typeof data === 'object'
-        ? (data as { text?: unknown }).text
-        : undefined
-
-    return !(nativeCode === 0 && typeof text === 'string' && text.length > 0)
-  } catch {
-    // Malformed payloads should settle and fail parsing instead of leaving the transaction pending.
-    return true
+  const scanType = data?.scanType
+  return {
+    code,
+    ...(scanType === 'qr' || scanType === 'bar' || scanType === 'all' ? { scanType } : {}),
+    ...(typeof data?.isDevice === 'boolean' ? { isDevice: data.isDevice } : {}),
+    ...(typeof data?.consumeUse === 'string' ? { consumeUse: data.consumeUse } : {}),
   }
 }
 
@@ -92,7 +98,8 @@ const androidTransport = createCallbackInjectedObjectTransport<
   callbackName: 'nativeBridgeCallback',
   callbackAliases: ['androidBridgeCallback'],
   serializeArgs: (input, callbackId) => [serializeJsonValue({ ...validateInput(input), callbackId })],
-  isTerminalPayload: isAndroidScanTerminalPayload,
+  // Android feat/1109 returns one callback per H5 scan invocation. Native device
+  // screens remain Native-owned after their start callback; no second H5 callback is awaited.
   parseResult,
 })
 
@@ -104,6 +111,7 @@ const iosTransport = createCallbackInjectedObjectTransport<
   methodName: 'scanCode',
   callbackName: 'nativeBridgeCallback',
   serializeArgs: (input, callbackId) => [serializeJsonValue({ ...validateInput(input), callbackId })],
+  // Preserve the H5 adapter's existing one-shot parsing; never infer Android metadata on iOS.
   parseResult,
 })
 
@@ -125,7 +133,7 @@ export const scanCodeCapability = defineCapability<
   name: 'scanCode',
   platforms: ['android', 'ios'],
   description:
-    'Scan a QR code, barcode, or either through the confirmed Android/iOS injected-object contract.',
+    'Scan a QR code, barcode, or either through the injected-object adapter where the host exposes scanCode.',
   sensitiveResult: true,
   resolve: resolveTransport,
 })

@@ -32,6 +32,22 @@ function localTemp(fn) {
   try { return fn(join(dir, 'object')) }
   finally { rmSync(dir, { recursive: true, force: true }) }
 }
+
+/**
+ * Mutable entry/manifest/catalog keys require -f to replace an existing OSS
+ * object. The nonproduction uploader already uses this flag; without it,
+ * ossutil cp may report success while build-meta.json remains stale.
+ * History snapshots and fingerprinted assets are never forcibly overwritten.
+ */
+export function putArgsForKey(key, path, cache) {
+  const replaceable = key === CATALOG ||
+    key === LAST + 'index.html' ||
+    key === LAST + 'build-meta.json' ||
+    key === LAST + 'release-manifest.json'
+  return ['cp', path, BUCKET + key,
+    ...(replaceable ? ['-f'] : []), '--cache-control', cache]
+}
+
 export class OssProdStore {
   constructor({ allowWrites = false, allowSwitch = false, allowDeletes = false } = {}) {
     this.allowWrites = allowWrites
@@ -69,7 +85,7 @@ export class OssProdStore {
           : hashedAsset
             ? 'public, max-age=31536000, immutable'
             : 'no-cache'
-      execOss('cp', path, BUCKET + key, '--cache-control', cache)
+      execOss(...putArgsForKey(key, path, cache))
 
     })
   }
