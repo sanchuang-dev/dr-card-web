@@ -4,7 +4,7 @@ import {
   LAST, HISTORY, CATALOG, MANIFEST, KEEP, makeCandidate,
   publish, rollback, pruneHistory, retentionPlan, safeFile, safeId,
 } from './oss-prod-release-core.mjs'
-import { OssProdStore } from './oss-prod-store.mjs'
+import { OssProdStore, putArgsForKey } from './oss-prod-store.mjs'
 
 class MemoryStore {
   constructor() {
@@ -266,4 +266,18 @@ test('OSS production driver defaults to read only and rejects all wrong deletion
   await assert.rejects(noIndex.put(LAST + 'index.html', Buffer.from('x')), /cutover disabled/)
   const noRemove = new OssProdStore({ allowDeletes: true })
   await assert.rejects(noRemove.remove(CATALOG), /Deletion forbidden/)
+})
+
+test('OSS mutable production pointers use explicit force overwrite without changing immutable copies', () => {
+  for (const key of [LAST + 'index.html', LAST + 'build-meta.json',
+    LAST + MANIFEST, CATALOG]) {
+    assert.deepEqual(putArgsForKey(key, '/tmp/object', 'no-cache'), [
+      'cp', '/tmp/object', 'oss://kbs-sdl/' + key, '-f', '--cache-control', 'no-cache',
+    ])
+  }
+  for (const key of [LAST + 'assets/index-aBcD1234.js',
+    HISTORY + 'r101-a1/index.html', HISTORY + 'r101-a1/build-meta.json']) {
+    const args = putArgsForKey(key, '/tmp/object', 'no-cache')
+    assert.equal(args.includes('-f'), false, key + ' must not be force-written')
+  }
 })
