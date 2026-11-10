@@ -82,19 +82,39 @@ describe('H5 scan invite confirmation', () => {
     expect(mocks.accept).not.toHaveBeenCalled()
   })
 
-  it('shows the real inviter but disables unsupported QR relationship creation', async () => {
+  it('sends one pending QR friend application on explicit click without claiming a buddy relation', async () => {
     mocks.mode = 'api'
     mocks.preview.mockResolvedValue({
       inviter: { id: '9', nickname: '真实邀请人', avatarUrl: null },
       relationship: 'available',
       demo: false,
-      confirmationAvailable: false,
+      confirmationAvailable: true,
     })
+    mocks.accept.mockResolvedValue({ result: 'pending', demo: false })
     mount({ source: 'native-buddy-recognition', raw: 'https://kbs.3cgroup.cn/buddy/invite/scan?code=550e8400-e29b-41d4-a716-446655440000' })
     await waitFor(() => expect(screen.getByText(/真实邀请人邀请你成为洗头搭子/)).toBeTruthy())
-    expect(screen.getByText(/后台暂未开放二维码添加好友接口/)).toBeTruthy()
-    expect((screen.getByRole('button', { name: '添加好友' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/发送好友申请/)).toBeTruthy()
+    expect((screen.getByRole('button', { name: '添加好友' }) as HTMLButtonElement).disabled).toBe(false)
     expect(mocks.accept).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '添加好友' }))
+    await waitFor(() => expect(screen.getByText('好友申请已发送')).toBeTruthy())
+    expect(screen.getByText(/等待对方在通知中确认/)).toBeTruthy()
+    expect(mocks.accept).toHaveBeenCalledOnce()
+    expect(mocks.navigate).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: '添加好友' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '完成' }))
+    expect(mocks.navigate).toHaveBeenCalledWith('/', { debug: null }, { replace: true })
+  })
+
+  it('shows a backend duplicate error without sending a second application automatically', async () => {
+    mocks.mode = 'api'
+    mocks.preview.mockResolvedValue({ inviter, relationship: 'available', demo: false, confirmationAvailable: true })
+    mocks.accept.mockRejectedValue(new Error('你们已经是好友了'))
+    mount({ source: 'native-buddy-recognition', raw: 'https://kbs.3cgroup.cn/buddy/invite/scan?code=550e8400-e29b-41d4-a716-446655440000' })
+    await waitFor(() => expect(screen.getByRole('button', { name: '添加好友' })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: '添加好友' }))
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('你们已经是好友了'))
+    expect(mocks.accept).toHaveBeenCalledOnce()
   })
 
   it('does not expose a fake acceptance in API mode without a native recognition result', async () => {
