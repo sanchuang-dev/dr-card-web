@@ -13,6 +13,7 @@ vi.mock('../services/sso/mallSso', async (importOriginal) => {
 
 import MallWebView from './MallWebView'
 import { MALL_SHOPS } from '../services/sso/mallSso'
+import { MALL_SEARCH_TAB_ROUTE } from '../app/router/mallSearch'
 
 function setup(initialEntry = '/mall', target: 'kbs_shop' | 'kbs_shop2' = 'kbs_shop') {
   const dispose = vi.fn()
@@ -43,6 +44,21 @@ describe('MallWebView', () => {
     const expected = new URL(MALL_SHOPS.kbs_shop2.url)
     expected.pathname = `${expected.pathname.replace(/\/$/, '')}/pages/goods/order_list/index`
     await waitFor(() => expect(iframe.src).toBe(expected.toString()))
+  })
+
+  it('opens first-party product search from the Home tab and keeps SSO on the same origin', async () => {
+    // The Home search destination is fixed to kbs_shop, even when the Mall default uses shop2.
+    const { iframe } = setup(MALL_SEARCH_TAB_ROUTE, 'kbs_shop2')
+    await waitFor(() => expect(iframe.src).toBe(
+      'https://kbs-shop.3cgroup.cn/pages/goods/goods_search/index',
+    ))
+    expect(mocks.createBridge).toHaveBeenCalledWith(iframe, 'kbs_shop', expect.any(Object))
+  })
+
+  it('does not accept a search path with extra query parameters or path traversal', async () => {
+    const { iframe } = setup('/mall?path=%2Fpages%2Fgoods%2Fgoods_search%2Findex%3Fnext%3Dhttps%3A%2F%2Fevil.example')
+    await waitFor(() => expect(iframe.src).toBe(MALL_SHOPS.kbs_shop.url))
+    expect(mocks.createBridge).toHaveBeenCalledWith(iframe, 'kbs_shop', expect.any(Object))
   })
 
   it('loads the allowlisted address path', async () => {
