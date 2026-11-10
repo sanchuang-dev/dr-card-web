@@ -12,7 +12,7 @@ import {
   readBuddyScanNavigation,
   type BuddyPreview,
 } from '../services/buddyRelations'
-import DearseedColumn from './DearseedColumn'
+import Home from './Home'
 
 type ViewState =
   | { kind: 'loading' }
@@ -29,7 +29,7 @@ type ViewState =
 export default function BuddyAccept() {
   const location = useLocation()
   const fixtureNavigate = useFixtureNavigate()
-  const { get, patch } = useFixtureQueryControls()
+  const { get } = useFixtureQueryControls()
   const debug = useFixtureDebug()
   const dismissed = get('state') === 'dismissed'
   const fixtureMode = runtimePolicy.dataMode === 'mock'
@@ -62,11 +62,11 @@ export default function BuddyAccept() {
 
   const dismiss = () => {
     if (sending) return
-    patch({ state: 'dismissed' })
+    fixtureNavigate('/', { debug: debug ? '1' : null }, { replace: true })
   }
 
   const confirm = async () => {
-    if (view.kind !== 'ready' || view.preview.relationship !== 'available' || !raw || sending) return
+    if (view.kind !== 'ready' || ['self', 'unavailable'].includes(view.preview.relationship) || !raw || sending) return
     setSending(true)
     setActionError(null)
     try {
@@ -85,34 +85,31 @@ export default function BuddyAccept() {
     }
   }
 
-  if (dismissed) return <DearseedColumn />
+  if (dismissed) return <Home />
 
   const preview = view.kind === 'ready' ? view.preview : null
   const relationship = preview?.relationship
-  const already = relationship === 'already-buddies'
   const title = view.kind === 'missing' ? '等待诗得丽扫码结果'
     : view.kind === 'loading' ? '正在查询邀请…'
       : view.kind === 'failed' ? '邀请查询失败'
         : view.kind === 'demo-complete' ? '演示确认已完成'
-          : already ? '你们已经是搭子啦'
-            : relationship === 'self' ? '不能邀请自己'
+          : relationship === 'self' ? '不能邀请自己'
               : relationship === 'unavailable' ? '这张邀请暂不可用'
                 : `${preview?.inviter.nickname ?? '对方'}邀请你成为洗头搭子`
   const description = view.kind === 'missing'
     ? '扫码识别协议尚未接通，请在卡博士 App 内使用诗得丽扫一扫'
     : view.kind === 'failed' ? view.message
       : view.kind === 'demo-complete' ? '这只是 H5 演示，不会创建或保存真实搭子关系'
-        : already ? '你们已建立搭子关系，无需重复绑定'
-          : relationship === 'self' ? '自己的二维码无法用于成为搭子'
+        : relationship === 'self' ? '自己的二维码无法用于成为搭子'
             : relationship === 'unavailable' ? '请确认二维码仍可使用'
               : preview?.demo ? '演示用户，仅验证确认交互，不会绑定真实账号'
                 : preview?.confirmationAvailable === false
-                  ? '已识别真实邀请人；后台尚未开放二维码确认，暂不能建立搭子关系'
+                  ? '已识别邀请人；后台暂未开放二维码添加好友接口'
                   : '确认后你们将成为洗头搭子'
 
   return (
     <>
-      <DearseedColumn />
+      <Home />
       <PromptOverlay
         open
         label="接受洗头搭子邀请"
@@ -138,16 +135,10 @@ export default function BuddyAccept() {
         <p role="status" className="mt-2 text-sm leading-6 text-text-secondary">{description}</p>
         {preview && <p className="mt-2 text-xs text-text-secondary">成为搭子后，当前版本暂不支持解除关系</p>}
         {actionError && <p role="alert" className="mt-2 text-sm text-danger-text">{actionError}</p>}
-        {view.kind === 'ready' && relationship === 'available' && (
+        {view.kind === 'ready' && relationship !== 'self' && relationship !== 'unavailable' && (
           <Button size="large" leadingIcon={UserRoundCheck} loading={sending}
             disabled={sending || preview?.confirmationAvailable === false} className="mt-5 w-full rounded-full" onClick={() => void confirm()}>
-            {preview?.demo ? '演示确认（不真实绑定）' : '确认成为搭子'}
-          </Button>
-        )}
-        {already && (
-          <Button size="large" className="mt-5 w-full rounded-full"
-            onClick={() => fixtureNavigate('/buddy', { debug: debug ? '1' : null })}>
-            查看我的搭子
+            {preview?.demo ? '演示添加（不真实绑定）' : '添加好友'}
           </Button>
         )}
         {view.kind === 'failed' && (

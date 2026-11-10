@@ -900,9 +900,9 @@ export const ROUTES: RouteMeta[] = [
   {
     path: '/buddy/accept',
     title: '接受邀请',
-    /* 原型是诗得丽专栏首页背景 + 邀请弹窗，不出现二级返回栏。 */
+    /* 邀请弹窗覆盖当前正式首页；已废弃的独立诗得丽专栏不再用作背景。 */
     titleBar: 'plain',
-    titleBarTitle: 'DearSeed',
+    titleBarTitle: '极地种子品牌专栏',
     nodes: [36],
     task: 'T007',
     entry: 'App 内诗得丽扫一扫解析成功后/通知中心接受邀请',

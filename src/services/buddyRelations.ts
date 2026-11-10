@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { runtimePolicy } from '../app/config/runtime'
 import { validateBuddyQrUrl } from './buddyQr'
 import { fetchBackendBuddyList, fetchUserByIdentifyCode } from './buddyBackend'
-import { fetchUserProfile } from './userProfile'
 
 /**
  * #107 H5-only contract. #105 Backend and #110 Native have not signed their APIs:
@@ -115,17 +114,10 @@ export async function previewBuddyQr(
     if (!origin?.trim()) throw new BuddyRelationsError('not-configured')
     const code = parseBuddyInviteCode(raw, origin)
     try {
-      const [inviter, profile, relations] = await Promise.all([
-        fetchUserByIdentifyCode(code),
-        fetchUserProfile(),
-        fetchBackendBuddyList(),
-      ])
-      const relationship: BuddyPreviewStatus = profile.identifyCode === code
-        ? 'self'
-        : relations.items.some(member => member.id === inviter.id)
-          ? 'already-buddies'
-          : 'available'
-      return { inviter, relationship, demo: false, confirmationAvailable: false }
+      // The QR preview identifies the inviter only. Friendship/self validation
+      // must be enforced by the authenticated, idempotent backend confirmation.
+      const inviter = await fetchUserByIdentifyCode(code)
+      return { inviter, relationship: 'available', demo: false, confirmationAvailable: false }
     } catch (error) {
       if (error instanceof BuddyRelationsError) throw error
       throw new BuddyRelationsError('request-failed')
