@@ -126,7 +126,7 @@ const customPages: Record<string, ReactElement> = {
   '/luck': <Luck />,
   '/luck/result': <DrawSuccess />,
   '/card': <Card />,
-  /* T009：#65 选择接收人与 #66 转赠成功为同一条链路，用 ?state=success 切换 */
+  /* T009：#65 选择接收人与 #66 转赠成功共用同一实现；成功态只由真实接口返回驱动 */
   '/card/share': <CardShare />,
   '/card/verify': <ScanVerify />,
   '/card/verify/confirm': <ConfirmVerify />,
@@ -251,6 +251,14 @@ const bridgeLabRoutes =
             return { Component }
           },
         },
+        {
+          // Non-production test-only H5 probe; not a Native protocol or public binding URL.
+          path: '/__debug/buddy-qr',
+          lazy: async () => {
+            const { default: Component } = await import('../../pages/BuddyQrProbe')
+            return { Component }
+          },
+        },
       ]
 
 // OSS artifacts are mounted at /h5/releases/<sha>/<run>/, whereas normal H5
@@ -280,7 +288,7 @@ export const router = createBrowserRouter([
         else if (route.boundary === 'webview') element = <WebViewBoundary />
         return { path: route.path, ...(route.path === '/' ? { loader: entryRedirectLoader } : {}), element }
       }),
-      // OSS static index.html is a valid document URL and shares the Home route.
+      // Explicit OSS index.html is a real object URL; keep the home route identical without a redirect parameter.
       { path: '/index.html', loader: entryRedirectLoader, element: customPages['/'] },
       /* T002 品牌 Token 展示页（工程参照页，不属于业务节点，不进入业务导航） */
       { path: '/tokens', element: <Tokens /> },

@@ -1,5 +1,7 @@
+import { useEffect, useRef } from 'react'
 import { AlertCircle, RotateCcw } from 'lucide-react'
 import { CHAT_BOT, CHAT_RETRY_LABEL, CHAT_SEND_FAILED_HINT, type ChatMessage } from '../../app/fixtures'
+import { hasChatRichText, sanitizeChatRichText } from './safeRichText'
 
 export interface ChatMessageListProps {
   messages: ChatMessage[]
@@ -20,8 +22,41 @@ export default function ChatMessageList({
   botGlyph = CHAT_BOT.glyph,
   className = '',
 }: ChatMessageListProps) {
+  const listRef = useRef<HTMLUListElement>(null)
+  const followBottomRef = useRef(true)
+  const previousScrollHeightRef = useRef(0)
+  const previousMessageCountRef = useRef(0)
+  const previousFirstMessageIdRef = useRef<string | undefined>(undefined)
+
+  useEffect(() => {
+    const list = listRef.current
+    const scroller = list?.closest<HTMLElement>('[data-chat-scroll]')
+    if (!scroller) return
+
+    const onScroll = () => {
+      followBottomRef.current = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 48
+    }
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+
+    const previousHeight = previousScrollHeightRef.current
+    const currentHeight = scroller.scrollHeight
+    const firstMessageId = messages[0]?.id
+    const historyPrepended = previousHeight > 0 && messages.length > previousMessageCountRef.current &&
+      firstMessageId !== previousFirstMessageIdRef.current
+    if (previousHeight === 0 || followBottomRef.current) {
+      scroller.scrollTop = Math.max(0, currentHeight - scroller.clientHeight)
+    } else if (historyPrepended && currentHeight > previousHeight) {
+      scroller.scrollTop += currentHeight - previousHeight
+    }
+    previousScrollHeightRef.current = currentHeight
+    previousMessageCountRef.current = messages.length
+    previousFirstMessageIdRef.current = firstMessageId
+
+    return () => scroller.removeEventListener('scroll', onScroll)
+  }, [messages])
+
   return (
-    <ul className={`flex flex-col gap-4 ${className}`} data-chat-list>
+    <ul ref={listRef} className={`flex flex-col gap-4 ${className}`} data-chat-list>
       {messages.map((message) => {
         const isBot = message.role === 'bot'
         return (
@@ -30,7 +65,7 @@ export default function ChatMessageList({
             data-chat-message
             data-chat-role={message.role}
             data-chat-status={message.status}
-            className={`flex gap-2 ${isBot ? 'justify-start' : 'justify-end'}`}
+            className={`flex w-full min-w-0 gap-2 ${isBot ? 'justify-start' : 'justify-end'}`}
           >
             {isBot && (
               <span
@@ -43,13 +78,22 @@ export default function ChatMessageList({
 
             <div className={`flex min-w-0 max-w-[76%] flex-col ${isBot ? 'items-start' : 'items-end'}`}>
               <div
-                className={`whitespace-pre-wrap break-words rounded-container px-3.5 py-2.5 text-sm leading-6 ${
+                data-chat-bubble
+                className={`min-w-0 max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] rounded-container px-3.5 py-2.5 text-sm leading-6 ${
                   isBot
                     ? 'bg-surface text-text-primary shadow-sm'
                     : `bg-primary text-text-inverse ${message.status === 'sending' ? 'opacity-70' : ''}`
                 }`}
               >
-                {message.text}
+                {hasChatRichText(message.text) ? (
+                  <div
+                    data-chat-rich-text
+                    className="min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere] [&_blockquote]:border-l-2 [&_blockquote]:pl-2 [&_code]:font-mono [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
+                    dangerouslySetInnerHTML={{ __html: sanitizeChatRichText(message.text) }}
+                  />
+                ) : (
+                  message.text
+                )}
               </div>
 
               {message.status === 'sending' && (

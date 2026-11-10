@@ -98,6 +98,7 @@
 | 今天签到 | `POST /api/signrecords/add` | 是 | 否 | `engineering/checkin-api-integration.md` |
 | 本月签到记录（`range=month`） | `GET /api/signrecords/index` | 是 | 否（裸数组） | `engineering/checkin-api-integration.md` |
 | 补签 | `POST /api/signrecords/makeup` | 是 | 否 | `engineering/checkin-api-integration.md` |
+| 优惠卡转赠 | `POST /api/coupons/give` | 是 | 否 | `engineering/coupon-transfer-api-integration.md` |
 
 > `POST /api/signrecords/makeup` 已纳入最新《签到页面接口文档》；补签前仍必须先通过 Native 激励广告闸门，详见 `engineering/checkin-api-integration.md` §3、§5.1、§6。
 

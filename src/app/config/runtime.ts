@@ -68,6 +68,40 @@ function validateApiBaseUrl(raw: string | undefined, errors: string[]): string |
   }
 }
 
+function validateSocketBaseUrl(
+  raw: string | undefined,
+  apiBaseUrl: string | null,
+  errors: string[],
+): string | null {
+  const value = trimOrUndefined(raw)
+  if (!value) return apiBaseUrl ? new URL(apiBaseUrl).origin : null
+
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      errors.push('VITE_SOCKET_BASE_URL must use http:// or https://.')
+      return null
+    }
+    if (parsed.pathname !== '/' || parsed.search || parsed.hash) {
+      errors.push('VITE_SOCKET_BASE_URL must be an origin only; configure Engine.IO path with VITE_SOCKET_PATH.')
+      return null
+    }
+    return parsed.origin
+  } catch {
+    errors.push('VITE_SOCKET_BASE_URL must be an absolute http(s) origin when provided.')
+    return null
+  }
+}
+
+function validateSocketPath(raw: string | undefined, errors: string[]): string {
+  const value = trimOrUndefined(raw) ?? '/socket.io'
+  if (!value.startsWith('/') || value.includes('?') || value.includes('#')) {
+    errors.push('VITE_SOCKET_PATH must be an absolute path without query or hash.')
+    return '/socket.io'
+  }
+  return value.endsWith('/') ? value : value + '/'
+}
+
 const configErrors: string[] = []
 const inferredAppEnvironment = inferAppEnvironment(import.meta.env.MODE)
 const rawAppEnvironment = trimOrUndefined(import.meta.env.VITE_APP_ENV)
@@ -114,6 +148,8 @@ if (isProdLike && bridgeMode !== 'native') {
 }
 
 const apiBaseUrl = validateApiBaseUrl(import.meta.env.VITE_API_BASE_URL, configErrors)
+const socketBaseUrl = validateSocketBaseUrl(import.meta.env.VITE_SOCKET_BASE_URL, apiBaseUrl, configErrors)
+const socketPath = validateSocketPath(import.meta.env.VITE_SOCKET_PATH, configErrors)
 const build: BuildIdentity = Object.freeze({
   sha: trimOrUndefined(import.meta.env.VITE_BUILD_SHA) ?? 'local',
   id: trimOrUndefined(import.meta.env.VITE_BUILD_ID) ?? `${appEnvironment}-local`,
@@ -150,6 +186,8 @@ export const runtimePolicy = Object.freeze({
   bridgeMode,
   apiBaseUrl,
   apiBaseConfigured: apiBaseUrl != null,
+  socketBaseUrl,
+  socketPath,
   isDevLike,
   isProdLike,
   fixtureQueriesEnabled: fixtureEnvironment,

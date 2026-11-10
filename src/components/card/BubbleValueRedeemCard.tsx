@@ -10,7 +10,8 @@ export interface BubbleValueRedeemCardProps {
  * 我的泡泡值兑换卡（洗护体验券专区顶部横条）
  * -------------------------------------------------------------
  * 视觉来源：用户 2026-09-29 提供的 bubble-value-card.svg / BubbleValueRedeemCard.tsx。
- * 忠实还原原稿色值，不做 Token 替换。
+ * 保留原 SVG 余额、礼物和色系；兑换引导按钮按 2026-10-10 用户反馈使用更柔和的暖金配色。
+ * CTA 仅滚动到下方体验券列表，不直接提交兑换。
  * 仅为渐变 / 滤镜 DOM id 加实例前缀，避免同页多实例 id 冲突。
  */
 const FONT_FAMILY = 'PingFang SC, Microsoft YaHei, Noto Sans CJK SC, sans-serif'
@@ -25,6 +26,7 @@ export default function BubbleValueRedeemCard({ value = 0, className, onRedeem }
     giftBody: `${instanceId}-gift-body`,
     halo: `${instanceId}-halo`,
     shadow: `${instanceId}-shadow`,
+    buttonShadow: `${instanceId}-button-shadow`,
   }
 
   return (
@@ -42,8 +44,9 @@ export default function BubbleValueRedeemCard({ value = 0, className, onRedeem }
           <stop offset="1" stopColor="#FFF5E5" />
         </linearGradient>
         <linearGradient id={ids.buttonBg} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#F15A00" />
-          <stop offset="1" stopColor="#E53B00" />
+          <stop offset="0" stopColor="#FFF9EE" />
+          <stop offset="0.55" stopColor="#FFF0D9" />
+          <stop offset="1" stopColor="#FFE1B9" />
         </linearGradient>
         <linearGradient id={ids.giftTop} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#FFE3A7" />
@@ -59,6 +62,9 @@ export default function BubbleValueRedeemCard({ value = 0, className, onRedeem }
         </radialGradient>
         <filter id={ids.shadow} x="-20%" y="-20%" width="140%" height="140%">
           <feDropShadow dx="0" dy="5" stdDeviation="8" floodColor="#EFB75F" floodOpacity="0.18" />
+        </filter>
+        <filter id={ids.buttonShadow} x="-20%" y="-45%" width="140%" height="190%">
+          <feDropShadow dx="0" dy="5" stdDeviation="7" floodColor="#C67B37" floodOpacity="0.18" />
         </filter>
       </defs>
 
@@ -95,6 +101,7 @@ export default function BubbleValueRedeemCard({ value = 0, className, onRedeem }
       </g>
 
       <g
+        className="group"
         onClick={onRedeem}
         style={{ cursor: onRedeem ? 'pointer' : 'default' }}
         role={onRedeem ? 'button' : undefined}
@@ -106,11 +113,24 @@ export default function BubbleValueRedeemCard({ value = 0, className, onRedeem }
           onRedeem()
         }}
       >
-        <rect x="690" y="101" width="245" height="73" rx="37" fill={`url(#${ids.buttonBg})`} />
-        <text x="756" y="148" fill="#FFFFFF" fontSize="31" fontFamily={FONT_FAMILY} fontWeight="650">
+        {/* 放大可触摸区域，但不挤压插画或余额文案。 */}
+        <rect x="670" y="72" width="285" height="128" rx="48" fill="transparent" data-redeem-hit-area />
+        <rect
+          x="686" y="91" width="254" height="90" rx="45"
+          fill={`url(#${ids.buttonBg})`}
+          stroke="#F1BC80" strokeWidth="2"
+          filter={`url(#${ids.buttonShadow})`}
+        />
+        <text x="714" y="148" fill="#B54C13" fontSize="32" fontFamily={FONT_FAMILY} fontWeight="700">
           立即兑换
         </text>
-        <path d="M887 126l12 12-12 12" fill="none" stroke="#FFF" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="898" cy="136" r="24" fill="#EA6D2C" />
+        <path d="m892 128 8 8-8 8" fill="none" stroke="#FFFFFF" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+        <rect
+          x="683" y="88" width="260" height="96" rx="48"
+          fill="none" stroke="#B54C13" strokeWidth="3"
+          className="pointer-events-none opacity-0 group-focus-visible:opacity-100"
+        />
       </g>
     </svg>
   )

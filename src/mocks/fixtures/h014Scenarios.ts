@@ -14,4 +14,3 @@ export const H014_BUDDY_PHONE_SCENARIOS = {
 
 export const H014_SLOW_RESPONSE_MS = 1_500
 
-export const H014_EXCHANGE_REDEEM_SUCCESS = { ok: true } as const

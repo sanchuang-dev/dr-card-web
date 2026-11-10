@@ -1,15 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowUpRight, ChevronRight, Crown, Droplets, ShoppingBag, Sparkles, X } from 'lucide-react'
 import AppPromptDialog from '../components/mobile/AppPromptDialog'
 import DebugPanel from '../components/mobile/DebugPanel'
 import FixtureOverlay from '../components/mobile/FixtureOverlay'
-import NewcomerDialog from '../components/mobile/NewcomerDialog'
 import PageContainer from '../components/mobile/PageContainer'
 import PromptOverlay from '../components/mobile/PromptOverlay'
-import NewcomerCouponDialog from '../components/mobile/NewcomerCouponDialog'
-import IdentityPickerSheet, { type PickerIdentity } from '../components/coupon/IdentityPickerSheet'
-import NewcomerGiftSheet from '../components/coupon/NewcomerGiftSheet'
 import { Button, ProgressIndicator } from '../components/ui'
 import { findRouteByPathname } from '../app/router/routes'
 import { openNativeAppStore } from '../app/adapters/appOpen'
@@ -21,11 +17,7 @@ import {
   CHECKIN_REMINDER,
   DEARSEED_BANNER_TEXT,
   DEARSEED_PICKS,
-  GIFT_FOR_NEW_USERS,
   MEMBER_PROFILE,
-  NEWCOMER_COUPON_SUCCESS,
-  NEWCOMER_FIXTURE,
-  NEWCOMER_COUPON_VARIANTS,
 } from '../app/fixtures'
 import columnBanner from '../assets/brand/home/home-banner-carousel.webp'
 import UserAvatar from '../components/mobile/UserAvatar'
@@ -59,39 +51,9 @@ export default function DearseedColumn() {
   const { overlay, open, close } = useOverlay()
   const [downloadHint, setDownloadHint] = useState<string | undefined>(undefined)
   const [downloadPending, setDownloadPending] = useState(false)
-  /* T043｜专栏入口三级弹窗状态。
-   * 流程：进入 /dearseed 页面 → pickerOpen 弹身份选择 → 选择身份
-   *   - 'new'（诗得丽新增用户）→ couponOpen 弹 NewcomerCouponDialog（洗发水体验券）
-   *   - 'existing'（卡博士存量用户）→ giftOpen 弹 NewcomerGiftSheet（新人礼包演示态）
-   * Demo 演示用，关闭选择器不需要后端身份识别（B-043）。
-   * 触发时机：useEffect 挂载时弹一次；本会话内不重复弹（sessionStorage 标记）。
-   * URL `?picker=off` 抑制本次触发（演示态可关闭）。
-   */
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [couponOpen, setCouponOpen] = useState(false)
-  const [couponSuccessOpen, setCouponSuccessOpen] = useState(false)
-  const [giftOpen, setGiftOpen] = useState(false)
-  /* 关爱机用户弹窗用 NEWCOMER_COUPON_VARIANTS，本期 mock 固定 coupon-1（1 张洗发水体验券） */
-  const dearseedCoupons = NEWCOMER_COUPON_VARIANTS['coupon-1']
-
-  /* T043R2｜进入专栏页面自动弹身份选择器。
-   * - 用户 2026-09-10 现场反馈：从卡博士 APP 首页「诗得丽品牌专栏」卡片跳转进专栏后必须弹出
-   * - 取消原 T043 实现的 sessionStorage 会话级抑制：每次 mount 都弹
-   * - URL 带 `?picker=off` 时跳过（演示态可关闭、自动化脚本可抑制）
-   * - 已带其他 overlay 的入口（如 ?overlay=reminder）也跳过，避免覆盖其他演示态
-   * - 路由切换时 pickerOpen 状态自然清空，组件重新 mount 会再次触发（符合"每次跳转进入都弹"语义）
-   */
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('picker') === 'off') return
-    if (params.has('overlay')) return
-    setPickerOpen(true)
-  }, [])
-
   const campaign = CAMPAIGN_FIXTURE
   const claimed = state?.key === 'claimed'
-  const ownedOverlay = overlay === 'reminder' || overlay === 'newcomer' || overlay === 'app-guide'
+  const ownedOverlay = overlay === 'reminder' || overlay === 'app-guide'
 
   const closeAppGuide = () => {
     setDownloadHint(undefined)
@@ -117,48 +79,12 @@ export default function DearseedColumn() {
     }
   }
 
-  /* T043｜身份选择回调：关闭选择器，按身份打开对应二级弹窗 */
-  const handleIdentityPick = (identity: PickerIdentity) => {
-    setPickerOpen(false)
-    if (identity === 'new') {
-      setCouponOpen(true)
-    } else {
-      setGiftOpen(true)
-    }
-  }
-
-  /* T043｜体验券（新增用户分支）确认 → 出领取成功反馈 */
-  const handleCouponConfirm = () => {
-    setCouponOpen(false)
-    setCouponSuccessOpen(true)
-  }
-
-  /* T043｜新人礼包（存量用户分支）确认 → 跳 GIFT_FOR_NEW_USERS.actionTo */
-  const handleGiftConfirm = () => {
-    setGiftOpen(false)
-    navigate(GIFT_FOR_NEW_USERS.actionTo)
-  }
-
-  /* T043｜任意弹窗关闭：清空对应状态 */
-  const handlePickerDismiss = () => setPickerOpen(false)
-  const handleCouponDismiss = () => {
-    setCouponOpen(false)
-    setCouponSuccessOpen(false)
-  }
-  const handleGiftDismiss = () => setGiftOpen(false)
-
-  /* T043｜领取成功反馈点「查看体验券」 → 跳 NEWCOMER_COUPON_SUCCESS.actionTo */
-  const handleCouponSuccessAction = () => {
-    setCouponSuccessOpen(false)
-    navigate(NEWCOMER_COUPON_SUCCESS.actionTo)
-  }
-
   return (
     <PageContainer inset={false} className="overflow-hidden pb-[calc(2rem+env(safe-area-inset-bottom))]">
       <button
         type="button"
         aria-label="诗得丽产品与活动推荐"
-        onClick={() => open('newcomer')}
+        onClick={() => open('app-guide')}
         className="relative block w-full overflow-hidden text-left"
       >
         <img src={columnBanner} alt="诗得丽产品与活动推荐" className="aspect-[375/210] w-full object-cover" />
@@ -328,7 +254,6 @@ export default function DearseedColumn() {
         <Button size="large" className="mt-5 w-full rounded-full" onClick={() => navigate('/checkin?state=success')}>{CHECKIN_REMINDER.action}</Button>
       </PromptOverlay>
 
-      <NewcomerDialog open={overlay === 'newcomer'} onComplete={() => navigate(NEWCOMER_FIXTURE.ctaTo)} onBody={() => open(NEWCOMER_FIXTURE.bodyToOverlay)} onDismiss={close} />
       <AppPromptDialog
         open={overlay === 'app-guide'}
         variant="guide"
@@ -338,27 +263,6 @@ export default function DearseedColumn() {
         downloadHint={downloadHint}
         downloadPending={downloadPending}
       />
-
-      {/* T043｜专栏入口三级弹窗流程：
-       *  1. IdentityPickerSheet（身份选择，先弹）
-       *  2a. NewcomerCouponDialog（选「诗得丽新增用户」→ 洗发水体验券，沿用 Home 弹窗）
-       *  2b. NewcomerGiftSheet（选「卡博士存量用户」→ 新人礼包演示态，新增）
-       *  3. NewcomerCouponDialog 自带的领取成功反馈（仅 2a 路径会触发）
-       */}
-      <IdentityPickerSheet
-        open={pickerOpen}
-        onPick={handleIdentityPick}
-        onDismiss={handlePickerDismiss}
-      />
-      <NewcomerCouponDialog
-        open={couponOpen}
-        successOpen={couponSuccessOpen}
-        coupons={dearseedCoupons}
-        onConfirm={handleCouponConfirm}
-        onDismiss={handleCouponDismiss}
-        onSuccessAction={handleCouponSuccessAction}
-      />
-      <NewcomerGiftSheet open={giftOpen} onConfirm={handleGiftConfirm} onDismiss={handleGiftDismiss} />
 
       <DebugPanel route={route} />
     </PageContainer>

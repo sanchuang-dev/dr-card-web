@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(() => ({ accessToken: 'secret-token', userInfo: null })),
   bootstrap: vi.fn(),
   refresh: vi.fn(),
+  getSignature: vi.fn(),
 }))
 vi.mock('../app/config/runtime', () => ({
   runtimePolicy: { dataMode: 'api', apiBaseUrl: 'https://api.test.example' },
@@ -14,6 +15,7 @@ vi.mock('./auth/session', () => ({
   getAuthSession: mocks.getSession,
   bootstrapAuthSession: mocks.bootstrap,
   refreshChatAuthAfterUnauthorized: mocks.refresh,
+  getApiSignatureCredentials: mocks.getSignature,
 }))
 
 const encode = (value: string) => new TextEncoder().encode(value)
@@ -32,6 +34,7 @@ beforeEach(() => {
   mocks.getSession.mockReset().mockReturnValue({ accessToken: 'secret-token', userInfo: null })
   mocks.bootstrap.mockReset().mockResolvedValue({ accessToken: 'new-token', userInfo: null })
   mocks.refresh.mockReset().mockResolvedValue(undefined)
+  mocks.getSignature.mockReset().mockResolvedValue({ token: 'upstream-token', salt: 'test-salt' })
   vi.stubGlobal('fetch', mocks.fetch)
 })
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
@@ -46,7 +49,11 @@ describe('#136 non-idempotent AI stream transport', () => {
     expect(delta).toEqual(['你🙂好'])
     expect(mocks.fetch).toHaveBeenCalledTimes(1)
     const [url, options] = mocks.fetch.mock.calls[0]
-    expect(url).toBe('https://api.test.example' + CHAT_ADD_PATH)
+    const signedUrl = new URL(url)
+    expect(signedUrl.origin + signedUrl.pathname).toBe('https://api.test.example' + CHAT_ADD_PATH)
+    expect(signedUrl.searchParams.get('token')).toBe('upstream-token')
+    expect(signedUrl.searchParams.get('secstr')).toMatch(/^[0-9a-f]{32}$/)
+    expect(options.headers.salt).toBe('test-salt')
     expect(options.method).toBe('POST')
     expect(options.headers).toMatchObject({
       Authorization: 'Bearer secret-token',
@@ -135,9 +142,23 @@ describe('#136 non-idempotent AI stream transport', () => {
       }))
     const controller = new AbortController()
     const request = sendChatStream('取消测试', { signal: controller.signal })
+    await vi.waitFor(() => expect(mocks.fetch).toHaveBeenCalledOnce())
     controller.abort()
     await expect(request).rejects.toMatchObject({ kind: 'cancelled' })
     expect(mocks.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancels before fetch when signature credentials resolve after abort', async () => {
+    let resolveCredentials!: (value: { token: string; salt: string }) => void
+    mocks.getSignature.mockReturnValueOnce(new Promise(resolve => {
+      resolveCredentials = resolve
+    }))
+    const controller = new AbortController()
+    const request = sendChatStream('取消前置签名', { signal: controller.signal })
+    controller.abort()
+    resolveCredentials({ token: 'upstream-token', salt: 'test-salt' })
+    await expect(request).rejects.toMatchObject({ kind: 'cancelled' })
+    expect(mocks.fetch).not.toHaveBeenCalled()
   })
 
   it('times out an unresponsive stream and does not issue another request', async () => {
@@ -161,6 +182,7 @@ describe('#136 non-idempotent AI stream transport', () => {
           () => reject(new DOMException('aborted', 'AbortError')), { once: true })
       }))
     const request = sendChatStream('账号切换')
+    await vi.waitFor(() => expect(mocks.fetch).toHaveBeenCalledOnce())
     mocks.getSession.mockReturnValue({ accessToken: 'other-token', userInfo: null })
     window.dispatchEvent(new Event('dr-card-ui:auth-session-changed'))
     await expect(request).rejects.toMatchObject({ kind: 'cancelled' })
@@ -169,6 +191,11 @@ describe('#136 non-idempotent AI stream transport', () => {
 
   it('bootstraps session when missing before sending the only POST', async () => {
     mocks.getSession.mockReturnValue(undefined as unknown as { accessToken: string; userInfo: null })
+    mocks.bootstrap.mockImplementationOnce(async () => {
+      const session = { accessToken: 'new-token', userInfo: null }
+      mocks.getSession.mockReturnValue(session)
+      return session
+    })
     mocks.fetch.mockResolvedValueOnce(stream('data: {"type":"done"}\n\n'))
     await expect(sendChatStream('hello')).resolves.toMatchObject({ mode: 'ai', text: '' })
     expect(mocks.bootstrap).toHaveBeenCalledOnce()

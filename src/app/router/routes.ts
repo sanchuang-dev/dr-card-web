@@ -888,7 +888,7 @@ export const ROUTES: RouteMeta[] = [
   },
   {
     path: '/buddy/invite/scan',
-    title: '请在卡博士 App 内扫码',
+    title: '认识新搭子，请在 App 内扫码',
     nodes: [30],
     task: 'H034',
     /* #102 最终版：该路由只是微信/系统相机的公开引导页，无 Native 安装检测、
@@ -923,7 +923,7 @@ export const ROUTES: RouteMeta[] = [
     label: '商城',
     icon: Headset,
     title: '商城',
-    titleBar: 'plain',
+    titleBar: 'hidden',
     titleBarTitle: '商城',
     nodes: [17],
     task: 'T008',
@@ -976,17 +976,16 @@ export const ROUTES: RouteMeta[] = [
       { key: 'used', node: 68, label: '兑换失败-已被使用' },
       { key: 'network', node: 68, label: '兑换失败-网络异常' },
     ],
-    owner: '兑换码输入（T009 施工；8/11/12 位规则 ⚠️ 待确认 B-009，规则收在 REDEEM_CODE_RULE）',
+    owner: '兑换码输入（T009；2026-10-12 后台合同至少 10 位，原值提交，规则收在 REDEEM_CODE_RULE）',
   },
   {
     path: '/card/share',
-    title: '分享',
+    title: '优惠卡转赠',
     nodes: [65, 66],
     task: 'T009',
-    entry: '卡包-可用券「转赠」按钮（reference/卡包.html 原型按钮文案；本页标题按 reference/分享.html 为「分享」）',
+    entry: '卡包-第三方可用券「转赠」按钮，须携带当前券 id',
     returnTo: '卡包',
-    states: [{ key: 'success', node: 66, label: '分享成功' }],
-    owner: '分享对象选择与分享成功（T009；B-015 已关闭，按原型做搭子列表夹具，不做接受/次数/时效/持久化）',
+    owner: '真实搭子单选 + POST /api/coupons/give；仅在接口成功返回后展示转赠成功，历史 ?state=success 不代表已转赠',
   },
   {
     path: '/card/verify',
@@ -1200,6 +1199,7 @@ export function isTabPath(pathname: string): boolean {
 
 /** 精确匹配；无则尝试 `:param` 动态路由匹配 */
 export function findRouteByPathname(pathname: string): RouteMeta | undefined {
+  // OSS's explicit static document shares the same route metadata as the home entry.
   const normalizedPath = pathname === '/index.html' ? '/' : pathname
   const exact = ROUTES.find((route) => route.path === normalizedPath)
   if (exact) return exact

@@ -1,10 +1,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { ReactNode } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   fetchMyCoupons: vi.fn(),
+  fetchRedeemedLocalCards: vi.fn(),
   overlay: null as string | null,
   close: vi.fn(),
 }))
@@ -13,6 +14,10 @@ vi.mock('../services/myCoupons', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../services/myCoupons')>()
   return { ...actual, fetchMyCoupons: mocks.fetchMyCoupons }
 })
+
+vi.mock('../services/myRedeemedCards', () => ({
+  fetchRedeemedLocalCards: mocks.fetchRedeemedLocalCards,
+}))
 
 vi.mock('../services/cardPackageProbe', () => ({
   probeDiscountCardList: vi.fn(),
@@ -108,8 +113,13 @@ function renderCard(entry = '/card') {
   )
 }
 
+beforeEach(() => {
+  mocks.fetchRedeemedLocalCards.mockResolvedValue([])
+})
+
 afterEach(() => {
   mocks.fetchMyCoupons.mockReset()
+  mocks.fetchRedeemedLocalCards.mockReset()
   mocks.overlay = null
   mocks.close.mockReset()
 })
@@ -294,5 +304,39 @@ describe('Card MyCoupons integration', () => {
     })
     expect(screen.queryByRole('dialog', { name: '使用体验券' })).toBeNull()
     expect(screen.queryByText('核心洗发水体验券')).toBeNull()
+  })
+})
+
+describe('Card redeemed local source=60 integration', () => {
+  it('shows local redeemed cards alongside third-party cards in the same tab without enabling third-party actions', async () => {
+    mocks.fetchMyCoupons.mockResolvedValue({
+      data: [{ id: 5, active_name: '第三方体验券', enable_amount: '12.00' }],
+      current_page: 1, per_page: 100, total: 1, last_page: 1,
+    })
+    mocks.fetchRedeemedLocalCards.mockResolvedValue([
+      { id: 21, source: 60, status: 10, card_name: '洗护体验卡', card_sn: 'RC00000000000014', card_type: 10 },
+      { id: 22, source: 60, status: 20, card_name: '已使用兑换券', card_type: 10 },
+    ])
+    renderCard()
+    expect(await screen.findByText('洗护体验卡')).toBeTruthy()
+    expect(screen.getByText('第三方体验券')).toBeTruthy()
+    expect(screen.getByText('兑换码领取 · RC00000000000014')).toBeTruthy()
+    const localCard = screen.getByText('洗护体验卡').closest('article')!
+    expect(localCard.querySelector<HTMLButtonElement>('button')?.disabled).toBe(true)
+    expect(localCard.querySelectorAll<HTMLButtonElement>('button')[1]?.disabled).toBe(true)
+    await waitFor(() => expect(screen.getByRole('tab', { name: /可用/ }).textContent).toContain('2'))
+    fireEvent.click(screen.getByRole('tab', { name: /已使用/ }))
+    expect(await screen.findByText('已使用兑换券')).toBeTruthy()
+  })
+
+  it('keeps the third-party list visible when local source fails', async () => {
+    mocks.fetchMyCoupons.mockResolvedValue({
+      data: [{ id: 5, active_name: '第三方体验券' }],
+      current_page: 1, per_page: 100, total: 1, last_page: 1,
+    })
+    mocks.fetchRedeemedLocalCards.mockRejectedValue(new Error('本地卡包网络失败'))
+    renderCard()
+    expect(await screen.findByText('第三方体验券')).toBeTruthy()
+    expect(await screen.findByText(/本地卡包网络失败/)).toBeTruthy()
   })
 })

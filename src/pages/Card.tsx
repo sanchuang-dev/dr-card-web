@@ -22,6 +22,7 @@ import {
   type MyCouponRecord,
   type MyCouponType,
 } from '../services/myCoupons'
+import { fetchRedeemedLocalCards, type LocalUserCard } from '../services/myRedeemedCards'
 
 /**
  * 电影票样式卡券（自营页面专用 - 第一版）
@@ -36,11 +37,12 @@ import {
  * - 不引入 CSS 变量，固定值先用 Tailwind class 表达；金色渐变通过 inline style 注入。
  */
 /**
- * 票券视图模型：正式数据来自 MyCoupons 用户持券记录。
+ * 票券视图模型：分别映射第三方 MyCoupons 与本地 source=60 兑换码卡券。
  * 原始金额与完整有效期仍保留在 service/domain 数据中；这里仅做展示映射。
  */
 interface CouponTicketView {
   id: string | null
+  origin?: 'local'
   name: string
   amountLabel?: string
   validityLabel?: string
@@ -74,11 +76,38 @@ function toCouponTicketView(coupon: MyCouponRecord): CouponTicketView {
   }
 }
 
+/** 本地卡券只按后台状态展示，不借用第三方 MyCoupons 的券 ID 和使用/转赠入口。 */
+function toLocalCardView(card: LocalUserCard): CouponTicketView {
+  const epoch = Number(card.valid_end_time)
+  const validityLabel = card.valid_end_time != null && Number.isFinite(epoch) && epoch > 0
+    ? new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(epoch * 1000)) + ' 到期'
+    : undefined
+  return {
+    origin: 'local',
+    id: 'local-' + String(card.id),
+    name: card.card_name,
+    amountLabel: card.card_type === 20 ? toAmountLabel(card.face_value) : undefined,
+    validityLabel,
+    limitNote: card.card_sn ? `兑换码领取 · ${card.card_sn}` : '兑换码领取',
+  }
+}
+
+const LOCAL_CARD_STATUS_BY_TAB: Record<CardCouponStatus, number> = {
+  available: 10,
+  used: 20,
+  expired: 30,
+}
+
 const MY_COUPON_TYPE_BY_STATUS: Record<CardCouponStatus, MyCouponType> = {
   available: 'unused',
   used: 'used',
   expired: 'out_of_date',
 }
+
+type LocalCardsRemote =
+  | { state: 'loading' }
+  | { state: 'success'; cards: LocalUserCard[] }
+  | { state: 'error'; message: string }
 
 type CouponRemote =
   | { state: 'loading' }
@@ -103,7 +132,7 @@ function MovieTicket({ coupon, expired, used, onUse, onShare }: MovieTicketProps
     : 'linear-gradient(135deg, var(--color-reward) 0%, var(--color-reward-strong) 100%)'
   /** 操作按钮可用性 */
   // A third-party record without a log ID must never trigger use/transfer.
-  const canAction = !isInactive && coupon.id !== null
+  const canAction = !isInactive && coupon.id !== null && coupon.origin !== 'local'
   return (
     <article
       className="relative"
@@ -124,14 +153,17 @@ function MovieTicket({ coupon, expired, used, onUse, onShare }: MovieTicketProps
         />
 
         {/* 主体：flex 左右两栏 */}
-        <div className="flex">
+        <div className="flex w-full min-w-0">
           {/* 左半：色块区 */}
           <div
             className="flex flex-col items-center justify-center px-4 py-4 text-center"
             style={{
               background: leftBg,
-              minWidth: 120,
-              flex: '0 0 auto',
+              // The left piece stays bounded so Chromium 88 has space to shrink the right pane.
+              width: '36%',
+              minWidth: 108,
+              maxWidth: 128,
+              flex: '0 0 36%',
             }}
             aria-hidden
           >
@@ -154,9 +186,20 @@ function MovieTicket({ coupon, expired, used, onUse, onShare }: MovieTicketProps
           />
 
           {/* 右半：内容区 */}
-          <div className="flex-1 px-4 py-3">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className={`min-w-0 truncate text-[15px] font-semibold ${isInactive ? 'text-coupon-used' : 'text-text-primary'}`}>
+          <div className="min-w-0 flex-1 px-3 py-3" style={{ minWidth: 0, flex: '1 1 0%' }}>
+            <div className="flex min-w-0 items-start justify-between gap-2">
+              <h3
+                className={`min-w-0 flex-1 text-[15px] font-semibold leading-5 ${isInactive ? 'text-coupon-used' : 'text-text-primary'}`}
+                style={{
+                  minWidth: 0,
+                  // -webkit-line-clamp is supported by legacy Chromium 88; avoid unsupported CSS line-clamp.
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  overflowWrap: 'anywhere',
+                }}
+              >
                 {coupon.name}
               </h3>
               <span
@@ -174,14 +217,14 @@ function MovieTicket({ coupon, expired, used, onUse, onShare }: MovieTicketProps
             </div>
 
             {coupon.validityLabel && (
-              <div className={`mt-1.5 flex items-center gap-1 text-[11px] ${isInactive ? 'text-text-inactive-muted' : 'text-text-tertiary'}`}>
-                <CalendarDays className="h-3 w-3" />
+              <div className={`mt-1.5 flex min-w-0 items-start gap-1 break-all text-[11px] ${isInactive ? 'text-text-inactive-muted' : 'text-text-tertiary'}`}>
+                <CalendarDays className="mt-0.5 h-3 w-3 flex-none" />
                 {coupon.validityLabel}
               </div>
             )}
 
             {coupon.limitNote && (
-              <div className={`mt-1 text-[11px] ${isInactive ? 'text-text-inactive-muted' : 'text-text-tertiary'}`}>
+              <div className={`mt-1 min-w-0 break-all text-[11px] ${isInactive ? 'text-text-inactive-muted' : 'text-text-tertiary'}`}>
                 {coupon.limitNote}
               </div>
             )}
@@ -190,13 +233,13 @@ function MovieTicket({ coupon, expired, used, onUse, onShare }: MovieTicketProps
              *  使用：橙色实心 pill；转赠：白底描边 pill。
              *  两个按钮 flex-1 平分宽度，视觉权重一致。
              *  已过期：两按钮都禁用；已使用：使用按钮隐藏（演示态）。 */}
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-3 flex min-w-0 items-center gap-2">
               {!used && !expired && (
                 <button
                   type="button"
                   onClick={onUse}
                   disabled={!canAction}
-                  className="h-8 flex-1 rounded-full bg-primary text-[12px] font-semibold text-text-inverse shadow-primary-button active:bg-primary-pressed disabled:opacity-50"
+                  className="h-8 min-w-0 flex-1 rounded-full bg-primary px-1 text-[12px] font-semibold text-text-inverse shadow-primary-button active:bg-primary-pressed disabled:opacity-50"
                 >
                   使用
                 </button>
@@ -205,7 +248,7 @@ function MovieTicket({ coupon, expired, used, onUse, onShare }: MovieTicketProps
                 type="button"
                 onClick={onShare}
                 disabled={!canAction}
-                className={`h-8 flex-1 rounded-full border text-[12px] font-semibold ${
+                className={`h-8 min-w-0 flex-1 rounded-full border px-1 text-[12px] font-semibold ${
                   canAction
                     ? 'border-border-strong bg-transparent text-text-secondary active:bg-surface-subtle'
                     : 'border-border bg-transparent text-text-inactive-muted'
@@ -228,7 +271,7 @@ function CouponTicketSkeleton() {
       <span className="sr-only">正在加载体验券</span>
       {[0, 1].map((index) => (
         <div key={index} aria-hidden="true" className="flex min-h-[166px] overflow-hidden rounded-[16px] bg-surface shadow-sm">
-          <div className="flex w-[120px] shrink-0 flex-col items-center justify-center gap-3 bg-reward-subtle px-4">
+          <div className="flex w-[36%] min-w-[108px] max-w-[128px] shrink-0 flex-col items-center justify-center gap-3 bg-reward-subtle px-4">
             <Skeleton className="h-9 w-14" />
             <Skeleton className="h-3 w-12" />
           </div>
@@ -275,6 +318,28 @@ export default function Card() {
     createInitialCouponLists,
   )
   const [retryVersion, setRetryVersion] = useState(0)
+  const [localCardsRemote, setLocalCardsRemote] = useState<LocalCardsRemote>({ state: 'loading' })
+
+  /** 本地兑换码卡券独立加载，不把它混作第三方优惠卡记录。 */
+  useEffect(() => {
+    let active = true
+    if (runtimePolicy.dataMode === 'mock') {
+      setLocalCardsRemote({ state: 'success', cards: [] })
+      return () => { active = false }
+    }
+    setLocalCardsRemote({ state: 'loading' })
+    void fetchRedeemedLocalCards()
+      .then((cards) => { if (active) setLocalCardsRemote({ state: 'success', cards }) })
+      .catch((error: unknown) => {
+        if (active) setLocalCardsRemote({
+          state: 'error',
+          message: isAppError(error) && error.kind === 'contract'
+            ? '兑换码卡券数据暂时无法展示，请稍后重试'
+            : error instanceof Error ? error.message : '网络请求失败',
+        })
+      })
+    return () => { active = false }
+  }, [retryVersion])
 
   /**
    * MyCoupons 没有分页 UI，因此每个分类按服务端允许的最大 pageSize 拉取，
@@ -328,13 +393,19 @@ export default function Card() {
   }, [retryVersion])
 
   const retryCouponList = () => {
+    setLocalCardsRemote({ state: 'loading' })
     setCouponLists((current) => ({ ...current, [tab]: { state: 'loading' } }))
     setRetryVersion((version) => version + 1)
   }
 
   const currentRemote = couponLists[tab]
-  const list =
-    currentRemote.state === 'success' ? currentRemote.coupons.map(toCouponTicketView) : []
+  const localCards = localCardsRemote.state === 'success'
+    ? localCardsRemote.cards.filter((card) => card.status === LOCAL_CARD_STATUS_BY_TAB[tab]).map(toLocalCardView)
+    : []
+  const list = [
+    ...(currentRemote.state === 'success' ? currentRemote.coupons.map(toCouponTicketView) : []),
+    ...localCards,
+  ]
 
   const availableCoupons =
     couponLists.available.state === 'success'
@@ -364,7 +435,11 @@ export default function Card() {
 
   const couponCount = (key: CardCouponStatus) => {
     const remote = couponLists[key]
-    return remote.state === 'success' ? remote.total : 0
+    const externalCount = remote.state === 'success' ? remote.total : 0
+    const localCount = localCardsRemote.state === 'success'
+      ? localCardsRemote.cards.filter((card) => card.status === LOCAL_CARD_STATUS_BY_TAB[key]).length
+      : 0
+    return externalCount + localCount
   }
 
   useEffect(() => {
@@ -470,22 +545,30 @@ export default function Card() {
         ))}
       </div>
 
-      <div className="mt-4 space-y-4" aria-live="polite" aria-busy={currentRemote.state === 'loading'}>
-        {currentRemote.state === 'success' &&
-          list.map((coupon, index) => (
+      <div className="mt-4 space-y-4" aria-live="polite" aria-busy={currentRemote.state === 'loading' || localCardsRemote.state === 'loading'}>
+        {list.map((coupon, index) => (
             <MovieTicket
-              key={coupon.id ?? ('missing-id-' + index)}
+              key={(coupon.origin ?? 'external') + '-' + (coupon.id ?? ('missing-id-' + index))}
               coupon={coupon}
               used={tab === 'used'}
               expired={tab === 'expired'}
               onUse={() => openUseSheet(coupon)}
               onShare={() => {
-                if (coupon.id) navigate('/card/share?coupon=' + encodeURIComponent(coupon.id))
+                if (coupon.origin === 'local' || !coupon.id) return
+                navigate('/card/share?coupon=' + encodeURIComponent(coupon.id), {
+                  state: {
+                    couponPreview: {
+                      name: coupon.name,
+                      amountLabel: coupon.amountLabel,
+                      validityLabel: coupon.validityLabel,
+                    },
+                  },
+                })
               }}
             />
           ))}
 
-        {currentRemote.state === 'loading' && <CouponTicketSkeleton />}
+        {list.length === 0 && (currentRemote.state === 'loading' || localCardsRemote.state === 'loading') && <CouponTicketSkeleton />}
 
         {currentRemote.state === 'error' && (
           <EmptyState
@@ -499,7 +582,14 @@ export default function Card() {
           />
         )}
 
-        {currentRemote.state === 'success' && list.length === 0 && (
+        {localCardsRemote.state === 'error' && (
+          <div role="alert" className="rounded-xl bg-surface p-3 text-sm text-text-secondary">
+            <p>兑换码卡券加载失败：{localCardsRemote.message}</p>
+            <button type="button" className="mt-2 text-text-brand" onClick={retryCouponList}>重试兑换码卡券</button>
+          </div>
+        )}
+
+        {currentRemote.state === 'success' && localCardsRemote.state === 'success' && list.length === 0 && (
           <EmptyState
             variant="no-data"
             className="min-h-[180px]"

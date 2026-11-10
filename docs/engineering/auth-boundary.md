@@ -14,10 +14,20 @@
 - H5 统一通过 `src/services/nativeBridge.ts` 获取并验证结果，业务页面不得直接访问宿主对象。
 - OAuth 开发登录：`POST {VITE_API_BASE_URL}/api/oauth/login`，请求体 `{ salt, token }`；成功响应兼容旧的 `{ userInfo, accessToken }`，以及当前后台返回的 `{ code: 0, data: { userInfo, accessToken, ... } }`；后续同源 API 请求使用 `Authorization: Bearer <accessToken>`。
 - 正式 H5 根首页在 `VITE_DATA_MODE=api` 时先完成登录；仅 `accessToken` 暂存于 `sessionStorage`，`userInfo` 保留在当前文档内存。Mock 模式保留独立浏览器预览，不模拟真实登录。
-- HTTP 401 或响应顶层 `code: 401` 触发一次单飞重登；原请求最多重放一次。重登失败进入 `/error?reason=auth`，不循环。
+- HTTP 401 或响应顶层 `code: 401` 触发一次单飞重登；原请求最多重放一次。首次打开文档时，如果初始 `/api/oauth/login` 自身返回 401，同样只允许再登录一次。若这次重登/重试登录再次返回 401，或重登成功后重放原请求仍返回 401，则判定当前用户会话已失效：H5 弹出「用户信息过期」Toast，并调用 Native `closeWebView()` 关闭当前 WebView，不再继续重登或停留在当前业务页。重登过程中的非 401 失败仍进入 `/error?reason=auth`，不循环。
 - 2026-09-28 后端统一响应协议：成功码 `code: 0`（兼容原生；`GET /api/user/detail` 此前 2026-09-24 实测的 `code: 200` 已由后端统一改回 0）；失败为非 0 code + `message` 字段（无 `msg` / `status`）。正式接口共用 `parseApiEnvelope` 解析。
 
 旧 iOS `webkit.messageHandlers.getAuthorizationInfo.postMessage({}) → window.onToken(token)` 仅作为历史联调 / Bridge Lab Raw Probe 证据保留，不再是 production auth contract。
+
+## 2026-10-16｜/api 请求签名（来自后台源码静态核对）
+
+本地 API `docs/api-signature.md`、`src/middleware/auth.ts`、`src/app/api/config.ts` 已确认：所有 `/api/**` HTTP 请求经 `AppAuthMiddleware` 校验。H5 除已有 Bearer 会话外，还需携带 `token`、`timesp`（Asia/Shanghai 的 `yyyy-MM-dd HH:mm:ss`）及 `secstr`（`md5(salt + 排序拼接参数 + salt)`）；服务端对收到的 Query + Body 合并（Body 优先），排除 `secstr`/`callback` 后计算签名，时间窗口默认 ±5 分钟。
+
+实现统一在 `src/services/http/apiSignature.ts`；Axios 通过 `httpClient` 拦截器补签，`/api/oauth/login` 的 `skipAuth` **仅跳过 Bearer，不能跳过 secstr**；客服 SSE 和真人转接的独立 `fetch` 调同一签名函数，保留不可重放语义；Socket.IO 握手仍使用既有 `auth.token`，不属于 `/api/**` HTTP 中间件。
+
+**两种 Token 不可混淆**：Native `getLoginToken()` 返回的上游 `token/salt` 用于请求签名；OAuth 返回的 `accessToken` 负责 Bearer 业务会话。Native 凭据只在文档内存保存，不新增持久化字段、不注入第三方 origin。无有效签名凭据不能静默发送无签名业务请求。
+
+此结论基于本地后端源码和签名样例复算，以及 H5 CI；**不代表后端已部署该版本，亦不代表 Android/iOS WebView、CORS、上传 FormData 和真实用户会话已验收**。后端文档另已知「客户端自行提交 salt 即被采信」及「窗口内无 nonce 防重放」的安全限制，当前仅做协议对接；后端安全策略升级须独立评估。
 
 ## 当前仍待确认
 

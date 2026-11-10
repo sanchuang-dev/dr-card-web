@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bug,
   Eye,
@@ -15,6 +15,7 @@ import {
   getNativeBridgeCapabilityCatalog,
   getNativeBridgeDiagnostics,
   invokeRegisteredNativeCapabilityForDebug,
+  subscribeNativeBridgeTransportDebugEvents,
   type NativeCapabilityName,
 } from '../services/nativeBridge'
 import {
@@ -34,7 +35,7 @@ type BridgeLabCallbackWindow = Window & {
   androidBridgeCallback?: (callbackId: string, payload: unknown) => void
   testFunc?: (params: unknown) => string
 }
-type LogLevel = 'call' | 'result' | 'callback' | 'error'
+type LogLevel = 'call' | 'result' | 'callback' | 'error' | 'timeout'
 
 type LabLog = {
   id: string
@@ -124,6 +125,79 @@ function errorValue(error: unknown): unknown {
     }
   }
   return error
+}
+
+function summarizeNativeArguments(args: readonly unknown[]) {
+  return args.map((argument) => {
+    if (typeof argument !== 'string') {
+      return { type: argument === null ? 'null' : Array.isArray(argument) ? 'array' : typeof argument }
+    }
+    try {
+      const parsed: unknown = JSON.parse(argument)
+      if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const record = parsed as Record<string, unknown>
+        return {
+          type: 'JSON string',
+          keys: Object.keys(record),
+          ...(typeof record.callbackId === 'string' ? { callbackId: record.callbackId } : {}),
+          ...(typeof record.scanType === 'string' ? { scanType: record.scanType } : {}),
+        }
+      }
+    } catch {
+      // Plain strings are represented by length only; their contents may be sensitive.
+    }
+    return { type: 'string', length: argument.length }
+  })
+}
+
+function getNativePayloadType(payload: unknown): string {
+  if (typeof payload === 'string') {
+    try {
+      JSON.parse(payload)
+      return 'JSON string'
+    } catch {
+      return 'string'
+    }
+  }
+  if (payload === null) return 'null'
+  if (Array.isArray(payload)) return 'array'
+  return typeof payload
+}
+
+function redactNativeCallbackPayload(
+  payload: unknown,
+  methodName: string | undefined,
+  forceSensitive: boolean,
+) {
+  if (methodName !== 'scanCode') return redactBridgeValue(payload, forceSensitive)
+
+  let normalized = payload
+  if (typeof normalized === 'string') {
+    try {
+      normalized = JSON.parse(normalized)
+    } catch {
+      return { value: '[REDACTED]', redacted: true }
+    }
+  }
+  const redaction = redactBridgeValue(normalized)
+  if (redaction.value === null || typeof redaction.value !== 'object' || Array.isArray(redaction.value)) {
+    return { value: '[REDACTED]', redacted: true }
+  }
+
+  const record = redaction.value as Record<string, unknown>
+  if (typeof record.code === 'string' && record.code.length > 0) {
+    record.code = '[REDACTED]'
+    redaction.redacted = true
+  }
+  const data = record.data
+  if (data !== null && typeof data === 'object' && !Array.isArray(data)) {
+    const dataRecord = data as Record<string, unknown>
+    if (typeof dataRecord.text === 'string') {
+      dataRecord.text = '[REDACTED]'
+      redaction.redacted = true
+    }
+  }
+  return redaction
 }
 
 function inputClassName() {
@@ -222,21 +296,23 @@ export default function BridgeLab() {
     }
   }
 
-  const appendLog = (
+  const appendLog = useCallback((
     level: LogLevel,
     title: string,
     options: {
       value?: unknown
       forceSensitive?: boolean
+      redaction?: { value: unknown; redacted: boolean }
       durationMs?: number
     } = {},
   ) => {
     sequence.current += 1
     const id = `${Date.now()}-${sequence.current}`
     const redaction =
-      options.value === undefined
+      options.redaction ??
+      (options.value === undefined
         ? { value: undefined, redacted: false }
-        : redactBridgeValue(options.value, options.forceSensitive)
+        : redactBridgeValue(options.value, options.forceSensitive))
 
     setLogs((current) =>
       [
@@ -253,7 +329,70 @@ export default function BridgeLab() {
         ...current,
       ].slice(0, 50),
     )
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!runtimePolicy.bridgeLabEnabled) return
+
+    return subscribeNativeBridgeTransportDebugEvents((event) => {
+      if (event.type === 'request') {
+        appendLog('call', `Native invoke · ${event.objectName}.${event.methodName}`, {
+          value: {
+            callbackId: event.callbackId,
+            callbackEndpoints: event.callbackNames.map((name) => `window.${name}`),
+            timeoutMs: event.timeoutMs,
+            args: summarizeNativeArguments(event.args),
+          },
+        })
+        return
+      }
+
+      if (event.type === 'callback') {
+        const capability = event.methodName
+          ? platformCatalog.find((item) => item.name === event.methodName)
+          : undefined
+        const endpoint = event.callbackName ? `window.${event.callbackName}` : 'method return'
+        const stage = !event.pendingMatched
+          ? 'unmatched callbackId'
+          : event.terminal === false
+            ? 'intermediate'
+            : event.terminal === true
+              ? 'terminal'
+              : 'stage unknown'
+        const payloadRedaction = redactNativeCallbackPayload(
+          event.payload,
+          event.methodName,
+          !event.pendingMatched || capability?.sensitiveResult === true,
+        )
+        const details = {
+          callbackId: event.callbackId,
+          endpoint,
+          source: event.source,
+          pendingMatched: event.pendingMatched,
+          ...(event.callbackCount === undefined ? {} : { callbackCount: event.callbackCount }),
+          ...(event.terminal === undefined ? {} : { terminal: event.terminal }),
+          ...(event.classificationError ? { classificationError: event.classificationError } : {}),
+          payloadType: getNativePayloadType(event.payload),
+        }
+        appendLog(
+          'callback',
+          `Native callback · ${endpoint} · ${stage}${event.callbackCount === undefined ? '' : ` · #${event.callbackCount}`}`,
+          {
+            value: { ...details, payload: event.payload },
+            redaction: {
+              value: { ...details, payload: payloadRedaction.value },
+              redacted: payloadRedaction.redacted,
+            },
+          },
+        )
+        return
+      }
+
+      appendLog('timeout', `Native callback timeout · ${event.objectName}.${event.methodName}`, {
+        value: { callbackId: event.callbackId, timeoutMs: event.timeoutMs },
+      })
+    })
+  }, [appendLog, platformCatalog])
 
   const runRegisteredCapability = async () => {
     if (!currentCapability) return
@@ -270,7 +409,7 @@ export default function BridgeLab() {
       }
     }
 
-    appendLog('call', `capability · ${currentCapability.name}`)
+    appendLog('call', `H5 requested · capability · ${currentCapability.name}`)
     const startedAt = performance.now()
     try {
       const result = await invokeRegisteredNativeCapabilityForDebug(
@@ -484,7 +623,7 @@ export default function BridgeLab() {
                   input JSON
                 </label>
                 <p className="mb-2 mt-1 text-[11px] leading-4 text-text-tertiary">
-                  异步 capability 的 callbackId 由 H5 Runtime 自动生成并注入，无需手填。
+                  异步 capability 的 callbackId 由 H5 Runtime 自动生成并注入；日志会记录实际调用、回调入口、次数与阶段。扫码正文默认脱敏。
                 </p>
                 <textarea
                   id="capability-input"
@@ -739,7 +878,7 @@ export default function BridgeLab() {
               <h2 className="text-sm font-semibold">Native → H5 callback endpoints</h2>
               <p className="mt-1 text-xs leading-5 text-text-tertiary">
                 异步能力统一目标为 nativeBridgeCallback；Android 当前已验证的 androidBridgeCallback
-                作为兼容入口接入同一个 callbackId pending channel。
+                作为兼容入口接入同一个 callbackId pending channel。实际到达的入口与 callbackId 会自动写入 Lab logs。
               </p>
             </div>
             <div className="mt-3 space-y-2 rounded-control bg-surface-subtle p-3 text-xs leading-5 text-text-secondary">

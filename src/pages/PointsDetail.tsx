@@ -117,7 +117,7 @@ export default function PointsDetail() {
              视觉统一使用品牌插画空态，直接落在页面背景上，不再套白卡片容器。 */
           <EmptyState
             variant="no-data"
-            visual={<EmptyStateIllustration />}
+            visual={<EmptyStateIllustration size="md" />}
             title={BUBBLE_LIST_END}
           />
         ) : (

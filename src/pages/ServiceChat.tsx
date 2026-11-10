@@ -142,7 +142,7 @@ function MockServiceChat() {
 
   const send = () => {
     const text = draft.trim()
-    if (!text) return
+    if (!text || humanStage === 'queuing') return
     setDraft('')
 
     /** T013R4：输入「人工客服」等同于点击页内「人工」按钮，触发人工客服状态机 */
@@ -164,9 +164,11 @@ function MockServiceChat() {
     settle(id, target.text)
   }
 
-  /** T013R4：人工坐席已接入后输入区可用；否则禁用并显示「正在接入...」 */
+  /** 兼容处理：保留原「人工」关键词触发 requestHuman() 的入口。
+   * idle 时允许正常 AI 输入或输入「人工」进入原模拟转接状态；
+   * 仅排队中禁用输入，接入后继续可发送。 */
   const humanActive = humanStage === 'connected'
-  const inputDisabled = !humanActive
+  const inputDisabled = humanStage === 'queuing'
   const inputPlaceholder = humanActive
     ? `与 ${CHAT_QUEUE.connected.agentName} 对话中…`
     : humanStage === 'queuing'
@@ -174,19 +176,19 @@ function MockServiceChat() {
       : CHAT_BOT.inputPlaceholder
 
   return (
-    <PageContainer className="flex min-h-full flex-col pb-0" inset={false}>
-      {/* T013R5：「企微客服」pill 移回壳层 TitleBar 右侧，页内顶部区只保留居中小字。 */}
-      <div className="px-4 pt-3">
+    <PageContainer className="h-full !min-h-0 min-w-0 w-full flex flex-col pb-0" inset={false}>
+      {/* 标题栏提供独立的福利官二维码入口；底部人工按钮只负责聊天转接。 */}
+      <div className="shrink-0 px-4 pt-3">
         <p className="text-center text-xs text-text-tertiary">
           AI 客服 {CHAT_BOT.name} 为您服务
         </p>
       </div>
 
-      <div className="flex-1 px-4 pb-4 pt-4" data-human-stage={humanStage}>
+      <div className="min-w-0 min-h-0 w-full flex-1 overflow-y-auto px-4 pb-4 pt-4" data-chat-scroll data-human-stage={humanStage}>
         <ChatMessageList messages={messages} onRetry={retry} />
       </div>
 
-      <div className="sticky bottom-0 border-t border-border-subtle bg-background px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
+      <div className="shrink-0 border-t border-border-subtle bg-background px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
         <div className="flex items-end gap-2">
           <button
             type="button"
@@ -199,7 +201,7 @@ function MockServiceChat() {
             人工
           </button>
 
-          <div className="flex min-h-11 flex-1 items-center rounded-container border-2 border-transparent bg-surface px-3 focus-within:border-border-focused">
+          <div className="flex min-h-11 min-w-0 flex-1 items-center rounded-container border-2 border-transparent bg-surface px-3 focus-within:border-border-focused">
             <input
               type="text"
               inputMode="text"
@@ -215,7 +217,7 @@ function MockServiceChat() {
               placeholder={inputPlaceholder}
               disabled={inputDisabled}
               aria-label="输入你的问题"
-              className="h-11 w-full bg-transparent text-sm text-text-primary outline-none placeholder:text-text-placeholder disabled:cursor-not-allowed"
+              className="h-11 min-w-0 w-full bg-transparent text-sm text-text-primary outline-none placeholder:text-text-placeholder disabled:cursor-not-allowed"
             />
           </div>
 
@@ -223,7 +225,7 @@ function MockServiceChat() {
             type="button"
             data-chat-send
             onClick={send}
-            disabled={!draft.trim()}
+            disabled={inputDisabled || !draft.trim()}
             aria-label="发送"
             className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-primary text-text-inverse active:bg-primary-pressed disabled:bg-disabled disabled:text-text-disabled"
           >
@@ -232,13 +234,9 @@ function MockServiceChat() {
         </div>
       </div>
 
-      {/* T013R4：企微二维码弹层恢复（R1+R2 撤掉的 #71 重新启用，但仅承担"企微客服"入口）。
-        * 触发：点击壳层 TitleBar 右侧「企微客服」pill（data-chat-wecom-entry）。
-        * 行为：仅展示福利官二维码 + 「取消」按钮，不承担"转人工"职责 ——「人工」走 requestHuman。
-        * T013R5：「取消」按钮居中（外层 flex justify-center）。 */}
       <BottomSheet
         open={wecomOpen}
-        title={CHAT_HUMAN_PROMPT.title}
+        title="品牌福利官"
         onClose={closeWecom}
         actions={
           <div className="flex justify-center">

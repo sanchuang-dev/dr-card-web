@@ -15,6 +15,19 @@ function routeUrl(path: string) {
   return path === '/' ? '/?newcomer=off' : path
 }
 
+async function stubMallIframes(page: Page, onRequest?: (url: string, resourceType: string) => void) {
+  for (const origin of ['https://kbs-shop.3cgroup.cn', 'https://kbs-shop2.3cgroup.cn']) {
+    await page.route(`${origin}/**`, async (route) => {
+      onRequest?.(route.request().url(), route.request().resourceType())
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<!doctype html><html><body>商城 E2E stub</body></html>',
+      })
+    })
+  }
+}
+
 function collectRuntimeErrors(page: Page) {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`))
@@ -80,6 +93,7 @@ test.describe('@formal-h5 active route smoke', () => {
   for (const route of staticFormalRoutes) {
     test(`${route.path} · ${route.title}`, async ({ page }) => {
       const runtimeErrors = collectRuntimeErrors(page)
+      await stubMallIframes(page)
 
       await page.goto(routeUrl(route.path), { waitUntil: 'domcontentloaded' })
       await expectHealthyFormalRoute(page)
@@ -87,6 +101,20 @@ test.describe('@formal-h5 active route smoke', () => {
       expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([])
     })
   }
+})
+
+test('@formal-h5 chat long OSS URLs stay inside narrow WebView bubbles', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 })
+  await page.goto('/service/chat', { waitUntil: 'domcontentloaded' })
+  const longUrl = 'https://hexxueyantest.oss-cn-guangzhou.aliyuncs.com/storage/20261008/' + 'a'.repeat(90)
+  await page.getByRole('textbox', { name: '输入你的问题' }).fill(longUrl)
+  await page.getByRole('textbox', { name: '输入你的问题' }).press('Enter')
+  await expect(page.locator('[data-chat-role="user"]')).toContainText(longUrl)
+  await expectHealthyFormalRoute(page)
+  const overflowBubbles = await page.locator('[data-chat-bubble]').evaluateAll((nodes) =>
+    nodes.filter((node) => node.scrollWidth > node.clientWidth + 1).length,
+  )
+  expect(overflowBubbles).toBe(0)
 })
 
 test('@formal-h5 first-level tab uses CSS fade without root snapshot', async ({ page }) => {
@@ -105,6 +133,49 @@ test('@formal-h5 first-level tab uses CSS fade without root snapshot', async ({ 
   const routeFrame = page.locator('[data-h5-route-active="true"]')
   await expect(routeFrame).toHaveAttribute('data-h5-route-transition', 'tab')
   await expectHealthyFormalRoute(page)
+
+  expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([])
+})
+
+test('@formal-h5 mall iframe mounts on first entry and is reused across tab changes', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page)
+  let mallDocumentRequests = 0
+  await stubMallIframes(page, (url, resourceType) => {
+    if (resourceType === 'document' && url.startsWith('https://kbs-shop.3cgroup.cn/')) {
+      mallDocumentRequests += 1
+    }
+  })
+
+  await page.goto('/?newcomer=off', { waitUntil: 'domcontentloaded' })
+  await expectHealthyFormalRoute(page)
+
+  const mallShell = page.locator('[data-mall-shell]')
+  const mallIframe = page.locator('iframe[title="卡博士商城"]')
+  await expect(mallIframe).toHaveCount(0)
+  expect(mallDocumentRequests).toBe(0)
+
+  await page.getByRole('button', { name: '商城' }).click()
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/mall')
+  await expect(mallShell).toBeVisible()
+  await expect(mallIframe).toHaveCount(1)
+  await expect.poll(() => mallDocumentRequests).toBe(1)
+
+  const firstLayout = await mallShell.boundingBox()
+  expect(firstLayout?.width ?? 0).toBeGreaterThan(0)
+  expect(firstLayout?.height ?? 0).toBeGreaterThan(0)
+  await mallIframe.evaluate((node) => node.setAttribute('data-e2e-instance', 'first'))
+
+  await page.getByRole('button', { name: '首页' }).click()
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/')
+  await expect(mallShell).toBeHidden()
+  await expect(mallShell).toHaveClass(/pointer-events-none/)
+  await expect(mallIframe).toHaveCount(1)
+
+  await page.getByRole('button', { name: '商城' }).click()
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/mall')
+  await expect(mallShell).toBeVisible()
+  await expect(mallIframe).toHaveAttribute('data-e2e-instance', 'first')
+  expect(mallDocumentRequests).toBe(1)
 
   expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([])
 })
@@ -153,7 +224,17 @@ test('@formal-h5 H021 title-bar actions remain available', async ({ page }) => {
 
   await page.goto('/service/chat', { waitUntil: 'domcontentloaded' })
   await expectHealthyFormalRoute(page)
-  await expect(page.locator('[data-chat-wecom-entry]')).toBeVisible()
+  // The real human action stays in the chat; the QR is a distinct titlebar action.
+  const humanEntry = page.locator('[data-chat-human-entry]')
+  await expect(humanEntry).toBeVisible()
+  await expect(humanEntry).toBeEnabled()
+  await humanEntry.click()
+  await expect(page.locator('[data-human-stage]')).toHaveAttribute('data-human-stage', 'queuing')
+  await expect(page.locator('[data-chat-human-sheet]')).toHaveCount(0)
+  await page.getByRole('button', { name: '福利官二维码' }).click()
+  await expect(page.locator('[data-chat-human-sheet]')).toBeVisible()
+  await page.getByRole('button', { name: '取消' }).click()
+  await expect(page.locator('[data-chat-human-sheet]')).toHaveCount(0)
 
   expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([])
 })
@@ -186,6 +267,43 @@ test('@formal-h5 H021 active formal H5 fills a wide WebView', async ({ page }) =
   expect(widths.container).toBeGreaterThan(480)
   expect(widths.titleBar).toBeGreaterThan(480)
 
+  expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([])
+})
+
+test('@formal-h5 H082 older WebView keeps title and TabBar outside the scroller', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page)
+
+  await page.setViewportSize({ width: 375, height: 568 })
+  await page.goto('/?newcomer=off', { waitUntil: 'domcontentloaded' })
+  await expectHealthyFormalRoute(page)
+
+  const scroll = page.locator('[data-page-scroll]')
+  const shell = scroll.locator('..')
+  // The first height class is the Chromium 88 fallback; the supports variant
+  // lets newer WebViews use the dynamic viewport without losing that fallback.
+  await expect(shell).toHaveClass(/\bh-screen\b/)
+  await expect(shell).toHaveClass(/supports-\[height:100dvh\]:h-dvh/)
+
+  const positions = () => page.evaluate(() => {
+    const title = document.querySelector('[data-title-bar]')
+    const nav = document.querySelector('nav[aria-label="主导航"]')
+    if (!title || !nav) throw new Error('H082 app shell controls not found')
+    return {
+      titleTop: title.getBoundingClientRect().top,
+      navTop: nav.getBoundingClientRect().top,
+      documentScroll: window.scrollY,
+    }
+  })
+
+  await expect.poll(() => scroll.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true)
+  const before = await positions()
+  await scroll.evaluate((node) => { node.scrollTop = node.scrollHeight })
+  expect(await scroll.evaluate((node) => node.scrollTop)).toBeGreaterThan(0)
+  const after = await positions()
+
+  expect(after.documentScroll).toBe(0)
+  expect(Math.abs(after.titleTop - before.titleTop)).toBeLessThanOrEqual(1)
+  expect(Math.abs(after.navTop - before.navTop)).toBeLessThanOrEqual(1)
   expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([])
 })
 
@@ -224,6 +342,7 @@ test('@formal-h5 H021 App title bar stays reachable while content scrolls', asyn
 
 test('@formal-h5 H021 first-level tabs use close while child pages use back', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page)
+  await stubMallIframes(page)
 
   for (const route of activeFormalTabRoutes) {
     await page.goto(routeUrl(route.path), { waitUntil: 'domcontentloaded' })
@@ -231,8 +350,14 @@ test('@formal-h5 H021 first-level tabs use close while child pages use back', as
 
     if (route.titleBar === 'hidden') {
       const close = page.locator('[data-host-close]')
-      await expect(close).toHaveCount(1)
-      await expect(close).toHaveAttribute('data-host-close-supported', 'false')
+      if (route.path === '/mall') {
+        // The embedded mall intentionally owns its full-screen surface; keep its current UI
+        // contract instead of imposing the generic hidden-title-bar close-control expectation.
+        await expect(close).toHaveCount(0)
+      } else {
+        await expect(close).toHaveCount(1)
+        await expect(close).toHaveAttribute('data-host-close-supported', 'false')
+      }
       continue
     }
 
@@ -284,14 +409,16 @@ test('@formal-h5 H022 shared claim-success implementation keeps route variants d
 test('@formal-h5 H022 prototype states stay on one route implementation', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page)
 
-  await page.goto('/card/share', { waitUntil: 'domcontentloaded' })
+  await page.goto('/card/share?coupon=91001', { waitUntil: 'domcontentloaded' })
   await expectHealthyFormalRoute(page)
-  await expect(page).toHaveURL(/\/card\/share$/)
+  expect(new URL(page.url()).pathname + new URL(page.url()).search).toBe('/card/share?coupon=91001')
+  await expect(page.getByRole('button', { name: '确认转赠' })).toBeDisabled()
 
+  // Historic success URL must not imply a transfer without coupon ID or API.
   await page.goto('/card/share?state=success', { waitUntil: 'domcontentloaded' })
   await expectHealthyFormalRoute(page)
-  await expect(page).toHaveURL(/\/card\/share\?state=success$/)
-  await expect(page.getByText('分享成功', { exact: true })).toBeVisible()
+  await expect(page.getByText('未选择待转赠卡券，请从卡包点击「转赠」进入')).toBeVisible()
+  await expect(page.getByText('分享成功', { exact: true })).toHaveCount(0)
 
   await page.goto('/service/chat/human?state=queuing', { waitUntil: 'domcontentloaded' })
   await expectHealthyFormalRoute(page)
@@ -304,10 +431,31 @@ test('@formal-h5 H022 prototype states stay on one route implementation', async 
   expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([])
 })
 
+test('@formal-h5 card transfer shows success only after the give API confirms it', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page)
+
+  await page.goto('/card/share?coupon=91001', { waitUntil: 'domcontentloaded' })
+  await expectHealthyFormalRoute(page)
+  await page.getByRole('radio', { name: '小美' }).click()
+  await page.getByRole('button', { name: '确认转赠' }).click()
+
+  await expect(page.getByRole('heading', { level: 2, name: '转赠成功' })).toBeVisible()
+  await expect(page.getByText('已成功转赠给「小美」')).toBeVisible()
+  await expect(page.getByText('演示环境：本次转赠仅模拟接口成功，未真实转出卡券')).toBeVisible()
+
+  await page.getByRole('button', { name: '查看我的卡包' }).click()
+  await expect(page).toHaveURL(/\/card\?state=available$/)
+  await expectHealthyFormalRoute(page)
+  await expect(page.getByText('Mock 洗护体验券')).toBeVisible()
+  await expect(page.getByText('Mock 新人体验活动')).toHaveCount(0)
+
+  expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([])
+})
+
 test('@formal-h5 H023 shared SearchField stays consistent across formal H5 consumers', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page)
 
-  await page.goto('/card/share', { waitUntil: 'domcontentloaded' })
+  await page.goto('/card/share?coupon=91001', { waitUntil: 'domcontentloaded' })
   await expectHealthyFormalRoute(page)
   const cardShareField = page.locator('[data-search-field="subtle"][data-search-field-size="regular"] input')
   await expect(cardShareField).toHaveCount(1)
@@ -339,8 +487,9 @@ test('@formal-h5 H023 shared empty-state visual is stable across data pages', as
     await expect(image).toHaveCount(1)
     const box = await image.boundingBox()
     expect(box).not.toBeNull()
-    expect(Math.round(box?.width ?? 0)).toBe(112)
-    expect(Math.round(box?.height ?? 0)).toBe(112)
+    // Full-page brand empty states share the 168px standard illustration size.
+    expect(Math.round(box?.width ?? 0)).toBe(168)
+    expect(Math.round(box?.height ?? 0)).toBe(168)
   }
 
   expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([])
@@ -365,6 +514,37 @@ test('@formal-h5 OSS index redirect enters the target without mounting Home', as
   expect(await page.evaluate(() => history.length)).toBe(
     await page.evaluate(() => (window as Window & { __entryHistoryLength?: number }).__entryHistoryLength),
   )
+  expect(await page.evaluate(() => (history.state as { idx?: number } | null)?.idx)).toBe(0)
+})
+
+
+test('@formal-h5 direct OSS redirect back closes the host when no H5 route history exists', async ({ page }) => {
+  await page.goto('/index.html?redirect=%2Fservice%2Fchat%2Fhuman', { waitUntil: 'domcontentloaded' })
+  await expect(page).toHaveURL(/\/service\/chat\/human$/)
+  expect(await page.evaluate(() => (history.state as { idx?: number } | null)?.idx)).toBe(0)
+
+  await page.getByRole('button', { name: '返回' }).click()
+
+  // Preview deliberately has no Native bridge. The close branch must fail visibly rather than
+  // navigating to Home or silently trying to pop a nonexistent H5 route.
+  await expect(page.getByRole('alert')).toHaveText('当前环境未启用原生关闭能力')
+  await expect(page).toHaveURL(/\/service\/chat\/human$/)
+  await expect(page.locator('[data-dearseed-avatar]')).toHaveCount(0)
+})
+
+test('@formal-h5 H5 back uses the previous route before requesting host close', async ({ page }) => {
+  await page.goto('/profile', { waitUntil: 'domcontentloaded' })
+  await expectHealthyFormalRoute(page)
+  await page.getByRole('button', { name: '通知' }).click()
+  await expect(page).toHaveURL(/\/notifications$/)
+  await expectHealthyFormalRoute(page)
+  expect(await page.evaluate(() => (history.state as { idx?: number } | null)?.idx ?? 0)).toBeGreaterThan(0)
+
+  await page.getByRole('button', { name: '返回' }).click()
+
+  await expect(page).toHaveURL(/\/profile$/)
+  await expectHealthyFormalRoute(page)
+  await expect(page.getByRole('alert')).toHaveCount(0)
 })
 
 test('@formal-h5 explicit OSS index without redirect remains on its entry document', async ({ page }) => {

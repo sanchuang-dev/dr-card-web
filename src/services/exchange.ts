@@ -1,33 +1,46 @@
 import { z } from 'zod'
 
-import { parseContract } from './contracts/parseContract'
-import { createBusinessError, httpClient } from './http'
+import { parseApiEnvelope } from './contracts/apiEnvelope'
+import { httpClient } from './http'
+
+/** Backend contract: API/docs/api-card.md -> POST /api/coupons/exchange. */
+export const EXCHANGE_REDEEM_PATH = '/api/coupons/exchange'
+
+const exchangeRedeemDataSchema = z
+  .object({
+    coupon_id: z.number().int().min(1),
+    points: z.number().int().min(0),
+  })
+  .passthrough()
+
+export interface ExchangeRedeemResult {
+  couponId: number
+  /** Authoritative remaining bubble-points balance returned by the backend. */
+  points: number
+}
 
 /**
- * H014 reserved transport seam; not a confirmed backend endpoint while H008 is blocked.
- * Backend minimal-action proposal: docs/engineering/exchange-redeem-api-proposal.md.
+ * Redeem one coupon template with the current authenticated user's bubble points.
+ *
+ * User identity and balance are deliberately not sent by H5; the backend derives
+ * both from the authenticated session and owns stock, deduction, ledger and issue
+ * compensation semantics.
  */
-export const H014_EXCHANGE_REDEEM_PATH = '/__h014/exchange/redeem'
-export const H014_EXCHANGE_REDEEM_UNAVAILABLE_COPY = '兑换服务尚未接通，请稍后再试'
-
-const exchangeRedeemResponseSchema = z.discriminatedUnion('ok', [
-  z.object({ ok: z.literal(true) }),
-  z.object({
-    ok: z.literal(false),
-    message: z.string().min(1),
-  }),
-])
-
-export async function redeemExchangeProduct(productId: string): Promise<void> {
+export async function redeemExchangeProduct(productId: number, projectId: number): Promise<ExchangeRedeemResult> {
+  if (!Number.isInteger(projectId) || projectId <= 0) throw new Error('请选择适用片区')
   const payload = await httpClient.request<unknown>({
     method: 'POST',
-    url: H014_EXCHANGE_REDEEM_PATH,
-    data: { productId },
-  })
-  const parsed = parseContract(exchangeRedeemResponseSchema, payload, {
-    source: 'api',
-    contract: 'h014.exchange-redeem',
+    url: EXCHANGE_REDEEM_PATH,
+    data: { id: productId, project_id: projectId },
   })
 
-  if (!parsed.ok) throw createBusinessError(parsed.message)
+  const data = parseApiEnvelope(payload, exchangeRedeemDataSchema, {
+    contract: 'coupons.exchange',
+    fallbackMessage: '兑换失败，请稍后重试',
+  })
+
+  return {
+    couponId: data.coupon_id,
+    points: data.points,
+  }
 }

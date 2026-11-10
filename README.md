@@ -1,6 +1,6 @@
 # 卡博士 App 内嵌 H5
 
-`dr-card-ui` 是 **卡博士原生 App 内嵌的 H5 前端工程**。项目最初用于高保真 UI 施工，目前已经进入正式工程开发阶段：继续保留 Mockplus / `preview` 作为 UI 真相，同时在 `dev` 接入真实 API、业务状态和 JSBridge，并通过 App WebView 联调后进入生产。
+`dr-card-web`（内部 npm 包名仍为 `dr-card-ui`）是 **卡博士原生 App 内嵌的 H5 前端工程**。项目最初用于高保真 UI 施工，目前已经进入正式工程开发阶段：继续保留 Mockplus / `preview` 作为 UI 真相，同时在 `dev` 接入真实 API、业务状态和 JSBridge，并通过 App WebView 联调后进入生产。
 
 ## 分支节奏
 

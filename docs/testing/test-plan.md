@@ -1,6 +1,6 @@
 # 卡博士 App 内嵌 H5 测试与验收方案
 
-> 适用仓库：`dangjingtao/dr-card-ui`
+> 适用仓库：`sanchuang-dev/dr-card-web`
 >
 > 适用主链路：`preview → dev → test → prod`
 >
@@ -10,7 +10,7 @@
 
 ## 1. 目标
 
-`dr-card-ui` 是 **卡博士 App 内嵌 H5 前端**。它既需要在浏览器中独立开发和预览，也需要最终运行在 Android / iOS App WebView 中，并与真实业务 API、Native JSBridge 协作。
+`dr-card-web`（npm 包名仍为 `dr-card-ui`）是 **卡博士 App 内嵌 H5 前端**。它既需要在浏览器中独立开发和预览，也需要最终运行在 Android / iOS App WebView 中，并与真实业务 API、Native JSBridge 协作。
 
 因此，本项目不能用“浏览器打开正常”代替完整验收。
 

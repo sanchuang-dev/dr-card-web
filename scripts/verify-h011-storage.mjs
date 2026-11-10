@@ -82,9 +82,11 @@ try {
   const { createStorageAdapter, storage: browserStorage } = storageModule
   const { defineStorageKey, STORAGE_KEYS } = keyModule
 
-  assert.deepEqual(Object.keys(STORAGE_KEYS), ['authSession'])
+  assert.deepEqual(Object.keys(STORAGE_KEYS), ['authSession', 'profilePinMasks'])
   assert.equal(STORAGE_KEYS.authSession.name, 'dr-card:auth-session')
   assert.equal(STORAGE_KEYS.authSession.area, 'session')
+  assert.equal(STORAGE_KEYS.profilePinMasks.name, 'dr-card:profile-pin-masks')
+  assert.equal(STORAGE_KEYS.profilePinMasks.area, 'local')
 
   const localBackend = createMemoryStorage()
   const sessionBackend = createMemoryStorage()
@@ -125,6 +127,12 @@ try {
   })
   assert.equal(sessionBackend.values.has(STORAGE_KEYS.authSession.name), true)
   assert.equal(localBackend.values.has(STORAGE_KEYS.authSession.name), false)
+
+  // A saved-PIN marker stores only boolean display state per user, never PIN digits.
+  assert.equal(adapter.write(STORAGE_KEYS.profilePinMasks, { '5': true }), true)
+  assert.deepEqual(adapter.read(STORAGE_KEYS.profilePinMasks), { '5': true })
+  assert.equal(sessionBackend.values.has(STORAGE_KEYS.profilePinMasks.name), false)
+  assert.equal(adapter.write(STORAGE_KEYS.profilePinMasks, { '5': '123456' }), false)
 
   localBackend.values.set(localKey.name, '{broken json')
   assert.equal(adapter.read(localKey), null)

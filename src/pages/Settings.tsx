@@ -15,6 +15,7 @@ import { useOverlay } from '../app/fixtures/useFixture'
 import UserAvatar from '../components/mobile/UserAvatar'
 import { useUserIdentity, acceptUserIdentityUpdate } from './profile/useUserIdentity'
 import { updateUserProfile, type UserUpdatePayload } from '../services/userProfile'
+import { storage, STORAGE_KEYS } from '../storage'
 import { uploadUserAvatar } from '../services/userAvatarUpload'
 import {
   chooseImage,
@@ -38,6 +39,18 @@ function matchYearOption(grade: string) {
   return yearOptions.includes(grade) ? grade : ''
 }
 
+// Persist only a per-account display flag, never the PIN, so returning to
+// Settings shows the same six-dot mask even if /detail omits PIN metadata.
+function hasPinMask(userId?: number) {
+  if (userId === undefined) return false
+  return storage.read(STORAGE_KEYS.profilePinMasks)?.[String(userId)] === true
+}
+
+function savePinMask(userId: number) {
+  const saved = storage.read(STORAGE_KEYS.profilePinMasks) ?? {}
+  storage.write(STORAGE_KEYS.profilePinMasks, { ...saved, [String(userId)]: true })
+}
+
 export default function Settings() {
   const navigate = useNavigate()
   const { overlay, close: closeOverlay } = useOverlay()
@@ -49,6 +62,9 @@ export default function Settings() {
   const [pin, setPin] = useState('')
   const [pinConfirmation, setPinConfirmation] = useState('')
   const [pinConfigured, setPinConfigured] = useState<boolean | undefined>()
+  // The six-dot preview only reflects a submitted request until the server
+  // reports a persisted PIN flag. Never retain or display the raw PIN.
+  const [pinSubmitted, setPinSubmitted] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [avatarSrc, setAvatarSrc] = useState<string | undefined>()
   const [pendingImage, setPendingImage] = useState<{ mimeType: string; imageBase64: string } | null>(null)
@@ -57,6 +73,7 @@ export default function Settings() {
   const [avatarPending, setAvatarPending] = useState<'photo' | 'album' | null>(null)
   const [avatarError, setAvatarError] = useState<string | null>(null)
   const bypassGuard = useRef(false)
+  const postSaveNavigation = useRef<number | null>(null)
   const [baseline, setBaseline] = useState(initialProfile)
   const profileLoad = identity.state === 'success' ? 'ready' : identity.state
   const dirty = nickname !== baseline.nickname || year !== baseline.year ||
@@ -74,12 +91,18 @@ export default function Settings() {
       birthday: identity.data.birthday ?? '',
     }
     setBirthday((current) => touchedRef.current.birthday ? current : next.birthday)
-    setPinConfigured(identity.data.pinConfigured)
+    setPinConfigured(identity.data.pinConfigured ?? (hasPinMask(identity.data.userId) ? true : undefined))
     setNickname((current) => touchedRef.current.nickname ? current : next.nickname)
     setYear((current) => touchedRef.current.year ? current : next.year)
     setAvatarSrc((current) => touchedRef.current.avatar ? current : identity.data.avatar)
     setBaseline(next)
   }, [identity])
+
+  // The success redirect belongs to the current settings mount. If the user
+  // leaves before it fires, never send a later page back to /profile.
+  useEffect(() => () => {
+    if (postSaveNavigation.current !== null) clearTimeout(postSaveNavigation.current)
+  }, [])
 
   // Account changes must never carry a draft PIN (or other profile edits)
   // across sessions. The identity store independently invalidates its cache.
@@ -88,6 +111,7 @@ export default function Settings() {
       setPin('')
       setPinConfirmation('')
       setPinConfigured(undefined)
+      setPinSubmitted(false)
       setBirthday('')
       setNickname('')
       setYear('')
@@ -199,10 +223,8 @@ export default function Settings() {
         setSaveError('请输入两次相同的 6 位数字消费密码')
         return
       }
-      if (identity.data.pinConfigured === undefined) {
-        setSaveError('消费密码服务暂不可用，请联系管理员')
-        return
-      }
+      // Always send a validated six-digit PIN to the existing update endpoint.
+      // Missing detail flags must not prevent the user from testing the API.
       payload.consume_password = pin
     }
     if (!Object.keys(payload).length && !pendingImage) {
@@ -215,6 +237,7 @@ export default function Settings() {
     try {
       if (pendingImage) payload.avatar_img = await uploadUserAvatar(pendingImage)
       const updated = await updateUserProfile(payload)
+      const pinAttempted = payload.consume_password !== undefined
       acceptUserIdentityUpdate(updated)
       setPendingImage(null)
       setAvatarSrc(updated.avatar_img || undefined)
@@ -229,12 +252,16 @@ export default function Settings() {
       setPin('')
       setPinConfirmation('')
       setPinConfigured(updated.consume_password_set ?? pinConfigured)
+      if (pinAttempted) {
+        setPinSubmitted(true)
+        savePinMask(updated.id)
+      }
       setBaseline(next)
       touchedRef.current = { nickname: false, year: false, avatar: false, birthday: false }
       bypassGuard.current = true
-      flashToast()
+      flashToast('保存成功')
       close()
-      window.setTimeout(() => navigate('/profile'), 600)
+      postSaveNavigation.current = window.setTimeout(() => navigate('/profile'), 600)
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : '保存失败，请重试')
     } finally {
@@ -312,7 +339,9 @@ export default function Settings() {
           className="flex w-full items-center gap-3 px-4 py-3 text-left">
           <span className="w-20 shrink-0 whitespace-nowrap text-sm text-text-tertiary">消费密码</span>
           <span className="min-w-0 flex-1 text-right text-sm text-text-tertiary">
-            {pin ? '待保存' : pinConfigured === undefined ? '尚未开放' : pinConfigured ? '已设置' : '未设置'}
+            {pin.length === 6 || pinSubmitted || pinConfigured === true
+              ? '●●●●●●'
+              : pinConfigured === false ? '未设置' : '设置'}
           </span>
           <ChevronRight className="h-5 w-5 shrink-0 text-text-tertiary" aria-hidden />
         </button>
@@ -429,7 +458,7 @@ export default function Settings() {
               )}
               {sheet === 'pin' && (
                 <>
-                  <p className="text-sm text-text-tertiary">设置 6 位数字消费密码，保存时将提交至账户服务。</p>
+                  <p className="text-sm text-text-tertiary">设置 6 位数字消费密码，确认修改后提交至账户服务。</p>
                   <label className="mt-4 block text-sm text-text-primary">
                     新消费密码
                     <input type="password" autoComplete="new-password" inputMode="numeric" maxLength={6}

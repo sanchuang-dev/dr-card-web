@@ -26,11 +26,24 @@ describe('EmptyStateIllustration', () => {
     expect(getByRole('img', { name: '暂无记录' })).toBeTruthy()
   })
 
-  it('merges the caller className without changing the fixed size', () => {
+  it('uses the 168px standard size by default and retains the caller className', () => {
     const { container } = render(<EmptyStateIllustration className="mb-4" />)
 
     const wrapper = container.querySelector('[data-empty-state-illustration]')
     expect(wrapper?.className).toContain('mb-4')
     expect(wrapper?.className).toContain('flex')
+    const image = container.querySelector('img')
+    expect(image?.className).toContain('h-[168px]')
+    expect(image?.className).toContain('w-[168px]')
+  })
+
+  it('supports the 128px compact size without changing decorative accessibility', () => {
+    const { container } = render(<EmptyStateIllustration size="sm" />)
+
+    const image = container.querySelector('img')
+    expect(image?.className).toContain('h-32')
+    expect(image?.className).toContain('w-32')
+    expect(image?.getAttribute('alt')).toBe('')
+    expect(image?.getAttribute('aria-hidden')).toBe('true')
   })
 })

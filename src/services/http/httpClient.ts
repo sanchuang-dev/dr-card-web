@@ -6,23 +6,30 @@ import axios, {
 } from 'axios'
 import { runtimePolicy } from '../../app/config/runtime'
 import { AppError, toAppError } from './appError'
+import { signCardApiUrl, type ApiSignatureCredentials } from './apiSignature'
 
 export const DEFAULT_HTTP_TIMEOUT_MS = 10_000
 
 type Awaitable<T> = T | Promise<T>
 
 export type HttpAuthHeadersProvider = () => Awaitable<Record<string, string> | undefined>
+export type HttpSignatureCredentialsProvider = () => Awaitable<ApiSignatureCredentials | undefined>
 export type HttpUnauthorizedHandler = () => Awaitable<void>
 export type HttpAuthFailureHandler = () => void
 
 export interface HttpRequestConfig extends AxiosRequestConfig {
   skipAuth?: boolean
+  /** Used for the OAuth request before the H5 session exists. */
+  signatureCredentials?: ApiSignatureCredentials
 }
 
 export interface HttpClientOptions {
   baseURL?: string
   timeoutMs?: number
   authHeadersProvider?: HttpAuthHeadersProvider
+  signatureCredentialsProvider?: HttpSignatureCredentialsProvider
+  /** Override only for focused tests; production follows runtime API mode. */
+  signatureEnabled?: boolean
   onUnauthorized?: HttpUnauthorizedHandler
   onAuthFailure?: HttpAuthFailureHandler
   adapter?: AxiosAdapter
@@ -33,11 +40,16 @@ export interface HttpClient {
 }
 
 let defaultAuthHeadersProvider: HttpAuthHeadersProvider | undefined
+let defaultSignatureCredentialsProvider: HttpSignatureCredentialsProvider | undefined
 let defaultUnauthorizedHandler: HttpUnauthorizedHandler | undefined
 let defaultAuthFailureHandler: HttpAuthFailureHandler | undefined
 
 export function setHttpAuthHeadersProvider(provider: HttpAuthHeadersProvider | undefined) {
   defaultAuthHeadersProvider = provider
+}
+
+export function setHttpSignatureCredentialsProvider(provider: HttpSignatureCredentialsProvider | undefined) {
+  defaultSignatureCredentialsProvider = provider
 }
 
 export function setHttpUnauthorizedHandler(handler: HttpUnauthorizedHandler | undefined) {
@@ -123,14 +135,32 @@ export function createHttpClient(options: HttpClientOptions = {}): HttpClient {
       (config as HttpRequestConfig).skipAuth || !belongsToBaseURL(config, effectiveBaseURL)
         ? undefined
         : await headersProvider()
+    const headers = AxiosHeaders.from(config.headers)
     if (authHeaders) {
-      const headers = AxiosHeaders.from(config.headers)
-      for (const [name, value] of Object.entries(authHeaders)) {
-        headers.set(name, value)
-      }
-      config.headers = headers
+      for (const [name, value] of Object.entries(authHeaders)) headers.set(name, value)
     }
 
+    // skipAuth suppresses Bearer on OAuth, but DOES NOT suppress the API signature.
+    // The backend signs the received query + body; all parameters are encoded only
+    // after computing secstr. Never attach Native credentials to a foreign origin.
+    const sameOrigin = belongsToBaseURL(config, effectiveBaseURL)
+    const requestUrl = new URL(config.url ?? '', effectiveBaseURL).toString()
+    if ((options.signatureEnabled ?? runtimePolicy.dataMode === 'api') &&
+        sameOrigin && new URL(requestUrl).pathname.startsWith('/api/')) {
+      const credentials = (config as HttpRequestConfig).signatureCredentials ??
+        await (options.signatureCredentialsProvider ?? defaultSignatureCredentialsProvider)?.()
+      if (!credentials?.salt) {
+        throw new AppError({
+          kind: 'configuration', code: 'API_SIGNATURE_CREDENTIALS_MISSING',
+          message: '当前 App 未提供签名凭据，请重新进入登录流程',
+        })
+      }
+      config.url = signCardApiUrl(requestUrl, config.params as Record<string, unknown> | URLSearchParams | undefined,
+        config.data, credentials)
+      config.params = undefined
+      headers.set('salt', credentials.salt)
+    }
+    config.headers = headers
     return config
   })
 

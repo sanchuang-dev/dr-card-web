@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { runtimePolicy } from '../config/runtime'
 import { bootstrapAuthSession, setAuthFlowEnabled } from '../../services/auth/session'
+import { isAppError } from '../../services/http/appError'
 
 export default function HomeAuthGate({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
@@ -18,8 +19,10 @@ export default function HomeAuthGate({ children }: { children: ReactNode }) {
         setAuthFlowEnabled(true)
         setReady(true)
       },
-      () => {
-        if (active) navigate('/error?reason=auth', { replace: true })
+      (error) => {
+        if (!active) return
+        if (isAppError(error) && error.status === 401) return
+        navigate('/error?reason=auth', { replace: true })
       },
     )
 

@@ -1,8 +1,24 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../app/config/runtime', () => ({
-  runtimePolicy: { dataMode: 'mock' },
+const live = vi.hoisted(() => ({
+  mode: { dataMode: 'mock' },
+  lookup: vi.fn(),
+  profile: vi.fn(),
+  relations: vi.fn(),
 }))
+vi.mock('../app/config/runtime', () => ({ runtimePolicy: live.mode }))
+vi.mock('./buddyBackend', () => ({
+  fetchUserByIdentifyCode: live.lookup,
+  fetchBackendBuddyList: live.relations,
+}))
+vi.mock('./userProfile', () => ({ fetchUserProfile: live.profile }))
+afterEach(() => {
+  live.mode.dataMode = 'mock'
+  live.lookup.mockReset()
+  live.profile.mockReset()
+  live.relations.mockReset()
+  vi.unstubAllEnvs()
+})
 
 import {
   acceptBuddyQr,
@@ -10,6 +26,7 @@ import {
   MOCK_BUDDY_SCAN_URL,
   previewBuddyQr,
   readBuddyScanNavigation,
+  parseBuddyInviteCode,
   type BuddyRelationsBackend,
 } from './buddyRelations'
 
@@ -81,5 +98,63 @@ describe('QR recognition and relationship backend boundary', () => {
 
   it('cannot create a relationship without a configured backend', async () => {
     await expect(acceptBuddyQr(valid)).rejects.toMatchObject({ reason: 'not-configured' })
+  })
+})
+
+describe('real H5 UUID invitation preview without the unsigned binding API', () => {
+  const origin = 'https://kbs.3cgroup.cn'
+  const uuid = '550e8400-e29b-41d4-a716-446655440000'
+  const qr = `${origin}/buddy/invite/scan?code=${uuid}`
+
+  function prepare() {
+    live.mode.dataMode = 'api'
+    vi.stubEnv('VITE_BUDDY_PUBLIC_ORIGIN', origin)
+    live.lookup.mockResolvedValue({ id: '9', nickname: '真实邀请人', avatarUrl: null })
+    live.profile.mockResolvedValue({ identifyCode: '550e8400-e29b-41d4-a716-446655440111' })
+    live.relations.mockResolvedValue({ items: [] })
+  }
+
+  it('parses exactly the trusted UUID and reads real account data without any write', async () => {
+    prepare()
+    expect(parseBuddyInviteCode(qr, origin)).toBe(uuid)
+    const preview = await previewBuddyQr(qr)
+    expect(preview).toEqual({
+      demo: false,
+      inviter: { id: '9', nickname: '真实邀请人', avatarUrl: null },
+      relationship: 'available',
+      confirmationAvailable: false,
+    })
+    expect(live.lookup).toHaveBeenCalledWith(uuid)
+    expect(live.profile).toHaveBeenCalledOnce()
+    expect(live.relations).toHaveBeenCalledOnce()
+    await expect(acceptBuddyQr(qr)).rejects.toMatchObject({ reason: 'not-configured' })
+  })
+
+  it('uses real logged-in identity and existing list for self / already-related states', async () => {
+    prepare()
+    live.profile.mockResolvedValue({ identifyCode: uuid })
+    expect((await previewBuddyQr(qr)).relationship).toBe('self')
+    live.profile.mockResolvedValue({ identifyCode: '550e8400-e29b-41d4-a716-446655440111' })
+    live.relations.mockResolvedValue({ items: [{ id: '9', nickname: '真实邀请人', avatarUrl: null }] })
+    expect((await previewBuddyQr(qr)).relationship).toBe('already-buddies')
+  })
+
+  it.each([
+    'http://kbs.3cgroup.cn/buddy/invite/scan?code=550e8400-e29b-41d4-a716-446655440000',
+    'https://evil.3cgroup.cn/buddy/invite/scan?code=550e8400-e29b-41d4-a716-446655440000',
+    'https://kbs.3cgroup.cn/buddy/invite/scan?code=invalid',
+    'https://kbs.3cgroup.cn/buddy/invite/scan?code=550e8400-e29b-41d4-a716-446655440000&code=550e8400-e29b-41d4-a716-446655440111',
+    'https://kbs.3cgroup.cn/buddy/invite/scan?code=550e8400-e29b-41d4-a716-446655440000&redirect=/buddy/accept',
+    '550e8400-e29b-41d4-a716-446655440000',
+  ])('rejects untrusted or malformed recognition, never queries the backend: %s', async raw => {
+    prepare()
+    await expect(previewBuddyQr(raw)).rejects.toMatchObject({ reason: 'invalid-code' })
+    expect(live.lookup).not.toHaveBeenCalled()
+  })
+
+  it('fails closed on a read endpoint outage and never reports relation creation', async () => {
+    prepare()
+    live.relations.mockRejectedValue(new Error('down'))
+    await expect(previewBuddyQr(qr)).rejects.toMatchObject({ reason: 'request-failed' })
   })
 })
