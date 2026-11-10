@@ -164,7 +164,7 @@ describe('Bridge Lab page', () => {
     expect(screen.queryByText(/bridge-lab-scan/)).toBeNull()
   })
 
-  it('shows scan callback correlation, actual endpoint, both stages, and redacts the QR text', async () => {
+  it('shows the single terminal scan callback, actual endpoint, and redacts the QR text', async () => {
     usePlatform('android')
     let request: { scanType: string; callbackId: string } | undefined
     labWindow.androidBridge = {
@@ -194,27 +194,19 @@ describe('Bridge Lab page', () => {
     labWindow.androidBridgeCallback?.(request!.callbackId, {
       code: 0,
       message: 'ok',
-      data: { text: 'buddy-qr-private-value', scanType: 'qr' },
-    })
-
-    await waitFor(() => expect(logs.textContent).toContain('intermediate'))
-    expect(logs.textContent).toContain('"text": "[REDACTED]"')
-    expect(logs.textContent).not.toContain('buddy-qr-private-value')
-
-    labWindow.androidBridgeCallback?.(request!.callbackId, {
-      code: 0,
-      message: 'ok',
-      data: { text: 'buddy-qr-private-value', scanType: 'qr' },
+      data: { text: 'buddy-qr-private-value', scanType: 'qr', isDevice: false },
     })
 
     await waitFor(() => {
       expect(logs.textContent).toContain('terminal')
       expect(logs.textContent).toContain('callbackCount')
     })
+    expect(logs.textContent).toContain('"text": "[REDACTED]"')
+    expect(logs.textContent).toContain('"isDevice": false')
     expect(logs.textContent).not.toContain('buddy-qr-private-value')
   })
 
-  it('can invoke a registered H032 capability with editable JSON input', async () => {
+    it('can invoke a registered H032 capability with editable JSON input', async () => {
     usePlatform('android')
     labWindow.androidBridge = {
       copyText(payload: unknown) {

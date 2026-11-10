@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
-import { VERIFY_VOUCHER_FIXTURE } from '../app/fixtures'
+import { VERIFY_FEEDBACK, VERIFY_VOUCHER_FIXTURE } from '../app/fixtures'
 import ConfirmVerify from './ConfirmVerify'
 
-describe('ConfirmVerify Native transaction result', () => {
-  it('shows the completed H5 result without presenting fixture store details as real Native data', () => {
+describe('ConfirmVerify Native scan result boundary', () => {
+  it('does not treat a legacy Native scan callback as completed card redemption', () => {
     render(
       <MemoryRouter
         initialEntries={[
@@ -26,12 +26,13 @@ describe('ConfirmVerify Native transaction result', () => {
       </MemoryRouter>,
     )
 
-    const returnButton = screen.getByRole('button', { name: '返回卡包' })
-    expect(returnButton).toBeTruthy()
-    expect(screen.queryByText('即将核销此券')).toBeNull()
-    expect(screen.queryByText(VERIFY_VOUCHER_FIXTURE.store)).toBeNull()
-
-    fireEvent.click(returnButton)
-    expect(screen.getByText('real-card-route')).toBeTruthy()
+    expect(screen.getByText('即将核销此券')).toBeTruthy()
+    expect(screen.getByText(VERIFY_VOUCHER_FIXTURE.store)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '返回卡包' })).toBeNull()
+    expect(screen.queryByText(VERIFY_FEEDBACK.done.title)).toBeNull()
+    expect(screen.getByText('真实核销服务尚未接入，此页面暂不能执行核销')).toBeTruthy()
+    expect(
+      (screen.getByRole('button', { name: '真实核销暂未接入' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
   })
 })

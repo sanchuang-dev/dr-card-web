@@ -59,7 +59,7 @@ test.describe('H027 Bridge Lab', () => {
     await expect(logs).toContainText('"success": true')
   })
 
-  test('shows correlated Android scan callback stages without exposing QR text by default', async ({ page }) => {
+  test('shows the single Android scan callback and redacts QR text by default', async ({ page }) => {
     await page.addInitScript(() => {
       const host = window as unknown as {
         androidBridge?: { scanCode(payload: unknown): void }
@@ -72,16 +72,13 @@ test.describe('H027 Bridge Lab', () => {
             host.androidBridgeCallback?.(request.callbackId, {
               code: 0,
               message: 'ok',
-              data: { text: 'e2e-buddy-qr-private', scanType: 'qr' },
+              data: {
+                text: 'e2e-buddy-qr-private',
+                scanType: 'qr',
+                isDevice: false,
+              },
             })
           }, 0)
-          setTimeout(() => {
-            host.androidBridgeCallback?.(request.callbackId, {
-              code: 0,
-              message: 'ok',
-              data: { text: 'e2e-buddy-qr-private', scanType: 'qr' },
-            })
-          }, 20)
         },
       }
     })
@@ -93,9 +90,9 @@ test.describe('H027 Bridge Lab', () => {
     const logs = page.locator('[data-bridge-lab-logs]')
     await expect(logs).toContainText('Native invoke · androidBridge.scanCode')
     await expect(logs).toContainText('androidBridgeCallback')
-    await expect(logs).toContainText('intermediate')
     await expect(logs).toContainText('terminal')
     await expect(logs).toContainText('[REDACTED]')
+    await expect(logs).toContainText('"isDevice": false')
     await expect(logs).not.toContainText('e2e-buddy-qr-private')
   })
 
