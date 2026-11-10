@@ -61,13 +61,13 @@ export async function createBuddyPoster(
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(60, 60, 840, 1160)
 
-  drawCentered(ctx, '诗得丽 · 洗头搭子', 175, 'bold 46px sans-serif', '#174749')
+  drawCentered(ctx, '极地种子 · 洗头搭子', 175, 'bold 46px sans-serif', '#174749')
   drawCentered(ctx, '快来成为我的洗头搭子吧～', 253, '34px sans-serif', '#345d5c')
 
   // 白底 + 静区全部在同一张 QR 原图内；勿在二维码上添加水印。
   ctx.drawImage(qr, 160, 335, 640, 640)
 
-  drawCentered(ctx, '请在卡博士 App 内使用「诗得丽扫一扫」', 1045, '29px sans-serif', '#345d5c')
+  drawCentered(ctx, '请在卡博士 App 内使用「极地种子扫一扫」', 1045, '29px sans-serif', '#345d5c')
   drawCentered(ctx, '扫码后确认，才能成为洗头搭子', 1100, '24px sans-serif', '#758a86')
   if (options.demo) {
     drawCentered(ctx, '演示二维码 · 无法建立真实关系', 1166, 'bold 26px sans-serif', '#ba5d35')
