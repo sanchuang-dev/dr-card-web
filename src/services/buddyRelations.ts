@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { runtimePolicy } from '../app/config/runtime'
 import { validateBuddyQrUrl } from './buddyQr'
-import { fetchBackendBuddyList, fetchUserByIdentifyCode } from './buddyBackend'
+import { fetchBackendBuddyList, fetchUserByIdentifyCode, sendBackendBuddyQrApplication } from './buddyBackend'
 
 /**
  * #107 H5-only contract. #105 Backend and #110 Native have not signed their APIs:
@@ -34,7 +34,9 @@ export interface BuddyRelationsBackend {
   list: () => Promise<unknown>
 }
 
-/** Backend Owner must explicitly supply a signed adapter; never silently use /api/friends CRUD. */
+/** The optional adapter covers future direct-accept contracts; current API mode reuses
+ * the verified Friends.add application endpoint instead of creating a relationship.
+ */
 const signedBackend: BuddyRelationsBackend | null = null
 
 export class BuddyRelationsError extends Error {
@@ -108,7 +110,7 @@ export async function previewBuddyQr(
   adapter: BuddyRelationsBackend | null = signedBackend,
 ): Promise<BuddyPreview> {
   // #107 independent H5 slice: existing authenticated read-only backend endpoints.
-  // Relation creation stays blocked until #105 provides its dedicated authorized QR acceptance.
+  // QR preview is read-only. A click can send an existing Friends.add request.
   if (!adapter && runtimePolicy.dataMode === 'api') {
     const origin = import.meta.env.VITE_BUDDY_PUBLIC_ORIGIN
     if (!origin?.trim()) throw new BuddyRelationsError('not-configured')
@@ -117,7 +119,7 @@ export async function previewBuddyQr(
       // The QR preview identifies the inviter only. Friendship/self validation
       // must be enforced by the authenticated, idempotent backend confirmation.
       const inviter = await fetchUserByIdentifyCode(code)
-      return { inviter, relationship: 'available', demo: false, confirmationAvailable: false }
+      return { inviter, relationship: 'available', demo: false, confirmationAvailable: true }
     } catch (error) {
       if (error instanceof BuddyRelationsError) throw error
       throw new BuddyRelationsError('request-failed')
@@ -142,7 +144,17 @@ export async function previewBuddyQr(
 export async function acceptBuddyQr(
   raw: string,
   adapter: BuddyRelationsBackend | null = signedBackend,
-): Promise<{ result: 'accepted' | 'already-buddies' | 'demo-only'; demo: boolean }> {
+): Promise<{ result: 'accepted' | 'already-buddies' | 'pending' | 'demo-only'; demo: boolean }> {
+  if (!adapter && runtimePolicy.dataMode === 'api') {
+    const origin = import.meta.env.VITE_BUDDY_PUBLIC_ORIGIN
+    if (!origin?.trim()) throw new BuddyRelationsError('not-configured')
+    const code = parseBuddyInviteCode(raw, origin)
+    // Resolve the UUID through the authenticated read endpoint on explicit click.
+    // The backend checks self, duplicates, reverse pending, and login identity.
+    const inviter = await fetchUserByIdentifyCode(code)
+    await sendBackendBuddyQrApplication(inviter.id)
+    return { result: 'pending', demo: false }
+  }
   const demo = checkQr(raw, adapter ?? undefined)
   // A preview never mutates the old in-memory buddy fixture or claims durable success.
   if (demo) return { result: 'demo-only', demo: true }
