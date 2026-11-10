@@ -5,11 +5,13 @@ const live = vi.hoisted(() => ({
   lookup: vi.fn(),
   profile: vi.fn(),
   relations: vi.fn(),
+  qrAdd: vi.fn(),
 }))
 vi.mock('../app/config/runtime', () => ({ runtimePolicy: live.mode }))
 vi.mock('./buddyBackend', () => ({
   fetchUserByIdentifyCode: live.lookup,
   fetchBackendBuddyList: live.relations,
+  sendBackendBuddyQrApplication: live.qrAdd,
 }))
 vi.mock('./userProfile', () => ({ fetchUserProfile: live.profile }))
 afterEach(() => {
@@ -17,6 +19,7 @@ afterEach(() => {
   live.lookup.mockReset()
   live.profile.mockReset()
   live.relations.mockReset()
+  live.qrAdd.mockReset()
   vi.unstubAllEnvs()
 })
 
@@ -101,7 +104,7 @@ describe('QR recognition and relationship backend boundary', () => {
   })
 })
 
-describe('real H5 UUID invitation preview without the unsigned binding API', () => {
+describe('real H5 UUID invitation through the existing friends/add application API', () => {
   const origin = 'https://kbs.3cgroup.cn'
   const uuid = '550e8400-e29b-41d4-a716-446655440000'
   const qr = `${origin}/buddy/invite/scan?code=${uuid}`
@@ -122,12 +125,24 @@ describe('real H5 UUID invitation preview without the unsigned binding API', () 
       demo: false,
       inviter: { id: '9', nickname: '真实邀请人', avatarUrl: null },
       relationship: 'available',
-      confirmationAvailable: false,
+      confirmationAvailable: true,
     })
     expect(live.lookup).toHaveBeenCalledWith(uuid)
     expect(live.profile).not.toHaveBeenCalled()
     expect(live.relations).not.toHaveBeenCalled()
-    await expect(acceptBuddyQr(qr)).rejects.toMatchObject({ reason: 'not-configured' })
+    expect(live.qrAdd).not.toHaveBeenCalled()
+    expect(await acceptBuddyQr(qr)).toEqual({ result: 'pending', demo: false })
+    expect(live.qrAdd).toHaveBeenCalledExactlyOnceWith('9')
+    expect(live.lookup).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects malformed QR before any write and preserves backend business errors', async () => {
+    prepare()
+    await expect(acceptBuddyQr(qr.replace('https://kbs.3cgroup.cn', 'https://attacker.example'))).rejects.toMatchObject({ reason: 'invalid-code' })
+    expect(live.lookup).not.toHaveBeenCalled()
+    expect(live.qrAdd).not.toHaveBeenCalled()
+    live.qrAdd.mockRejectedValueOnce(new Error('你们已经是好友了'))
+    await expect(acceptBuddyQr(qr)).rejects.toThrow('你们已经是好友了')
   })
 
   it('does not preflight the friendship or self state before showing an inviter', async () => {
