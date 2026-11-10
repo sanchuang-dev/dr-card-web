@@ -69,7 +69,7 @@ describe('H5 scan invite confirmation', () => {
     expect(mocks.navigate).not.toHaveBeenCalled()
   })
 
-  it('uses server status for already-buddies and self; no confirmation write', async () => {
+  it('blocks self but never suppresses add on an already-related preview status', async () => {
     mocks.preview.mockResolvedValue({ inviter, relationship: 'self', demo: false })
     const { unmount } = mount()
     await waitFor(() => expect(screen.getByText('不能邀请自己')).toBeTruthy())
@@ -77,7 +77,7 @@ describe('H5 scan invite confirmation', () => {
     unmount()
     mocks.preview.mockResolvedValue({ inviter, relationship: 'already-buddies', demo: false })
     mount()
-    await waitFor(() => expect(screen.getByText('你们已经是搭子啦')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/后台邀请人邀请你成为洗头搭子/)).toBeTruthy())
     expect(screen.getByRole('button', { name: '添加好友' })).toBeTruthy()
     expect(mocks.accept).not.toHaveBeenCalled()
   })
