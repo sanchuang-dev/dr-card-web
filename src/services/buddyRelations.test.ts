@@ -125,18 +125,19 @@ describe('real H5 UUID invitation preview without the unsigned binding API', () 
       confirmationAvailable: false,
     })
     expect(live.lookup).toHaveBeenCalledWith(uuid)
-    expect(live.profile).toHaveBeenCalledOnce()
-    expect(live.relations).toHaveBeenCalledOnce()
+    expect(live.profile).not.toHaveBeenCalled()
+    expect(live.relations).not.toHaveBeenCalled()
     await expect(acceptBuddyQr(qr)).rejects.toMatchObject({ reason: 'not-configured' })
   })
 
-  it('uses real logged-in identity and existing list for self / already-related states', async () => {
+  it('does not preflight the friendship or self state before showing an inviter', async () => {
     prepare()
-    live.profile.mockResolvedValue({ identifyCode: uuid })
-    expect((await previewBuddyQr(qr)).relationship).toBe('self')
-    live.profile.mockResolvedValue({ identifyCode: '550e8400-e29b-41d4-a716-446655440111' })
-    live.relations.mockResolvedValue({ items: [{ id: '9', nickname: '真实邀请人', avatarUrl: null }] })
-    expect((await previewBuddyQr(qr)).relationship).toBe('already-buddies')
+    live.profile.mockRejectedValue(new Error('profile unavailable'))
+    live.relations.mockRejectedValue(new Error('friends unavailable'))
+    expect((await previewBuddyQr(qr)).relationship).toBe('available')
+    expect(live.lookup).toHaveBeenCalledWith(uuid)
+    expect(live.profile).not.toHaveBeenCalled()
+    expect(live.relations).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -154,7 +155,7 @@ describe('real H5 UUID invitation preview without the unsigned binding API', () 
 
   it('fails closed on a read endpoint outage and never reports relation creation', async () => {
     prepare()
-    live.relations.mockRejectedValue(new Error('down'))
+    live.lookup.mockRejectedValue(new Error('down'))
     await expect(previewBuddyQr(qr)).rejects.toMatchObject({ reason: 'request-failed' })
   })
 })
