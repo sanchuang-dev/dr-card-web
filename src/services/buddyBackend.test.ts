@@ -7,7 +7,7 @@ vi.mock('./http', async importOriginal => {
 })
 vi.mock('./notices', () => ({ fetchNoticePage: mock.noticePage, noticeText: (value: string | null) => value || '' }))
 import {
-  fetchBackendBuddyList, sendBackendBuddyApplication, agreeBackendBuddyApplication,
+  fetchBackendBuddyList, sendBackendBuddyApplication, sendBackendBuddyQrApplication, agreeBackendBuddyApplication,
   fetchBackendBuddyApplications, fetchUserByIdentifyCode,
 } from './buddyBackend'
 
@@ -51,6 +51,27 @@ describe('existing backend buddy contract (kbs/API master@b6d2821)', () => {
     })
     await expect(sendBackendBuddyApplication('123')).rejects.toThrow('手机号')
     expect(mock.request).toHaveBeenCalledTimes(1)
+  })
+
+  it('submits QR source=20 with the looked-up numeric friend_id, never a mobile number or an accepted relation', async () => {
+    mock.request.mockResolvedValueOnce(envelope({ id: 12, friend_id: 9, source: 20, status: 10 }))
+    await sendBackendBuddyQrApplication('9')
+    expect(mock.request).toHaveBeenCalledWith({
+      method: 'POST', url: '/api/friends/add', data: { friend_id: 9, source: 20 },
+    })
+    for (const bad of ['9abc', '0', '-1', '01', '4294967296', '9007199254740992']) {
+      await expect(sendBackendBuddyQrApplication(bad)).rejects.toThrow('编号无效')
+    }
+    expect(mock.request).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects wrong target, accepted status and the existing backend duplicate/self errors', async () => {
+    mock.request.mockResolvedValueOnce(envelope({ id: 12, friend_id: 8, source: 20, status: 10 }))
+    await expect(sendBackendBuddyQrApplication('9')).rejects.toThrow()
+    mock.request.mockResolvedValueOnce(envelope({ id: 12, friend_id: 9, source: 20, status: 20 }))
+    await expect(sendBackendBuddyQrApplication('9')).rejects.toThrow()
+    mock.request.mockResolvedValueOnce({ code: 500, message: '好友申请已发送，等待对方确认', data: [] })
+    await expect(sendBackendBuddyQrApplication('9')).rejects.toThrow('好友申请已发送，等待对方确认')
   })
 
   it('does not mark already-agreed users as newly invited', async () => {

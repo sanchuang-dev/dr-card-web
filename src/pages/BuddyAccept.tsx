@@ -20,11 +20,13 @@ type ViewState =
   | { kind: 'ready'; preview: BuddyPreview }
   | { kind: 'failed'; message: string }
   | { kind: 'demo-complete' }
+  | { kind: 'request-sent' }
 
 /**
  * #107: consumes ONLY an in-App, route-state QR recognition result; never the public
  * /buddy/invite/scan URL. #110 Native must preserve existing device/card redemption.
- * API/test/prod may preview the actual UUID owner, but QR relation writes remain blocked until #105.
+ * API/test/prod previews the UUID owner; explicit click sends a pending Friends.add request.
+ * The recipient must separately agree before an actual buddy relation exists.
  */
 export default function BuddyAccept() {
   const location = useLocation()
@@ -74,8 +76,10 @@ export default function BuddyAccept() {
       if (!alive.current) return
       if (result.demo) {
         setView({ kind: 'demo-complete' })
+      } else if (result.result === 'pending') {
+        // This is a pending request, not a confirmed buddy relation.
+        setView({ kind: 'request-sent' })
       } else {
-        // No local fixture mutation. Buddy list independently reloads from the backend.
         fixtureNavigate('/buddy', { debug: debug ? '1' : null }, { replace: true })
       }
     } catch (error) {
@@ -93,6 +97,7 @@ export default function BuddyAccept() {
     : view.kind === 'loading' ? '正在查询邀请…'
       : view.kind === 'failed' ? '邀请查询失败'
         : view.kind === 'demo-complete' ? '演示确认已完成'
+          : view.kind === 'request-sent' ? '好友申请已发送'
           : relationship === 'self' ? '不能邀请自己'
               : relationship === 'unavailable' ? '这张邀请暂不可用'
                 : `${preview?.inviter.nickname ?? '对方'}邀请你成为洗头搭子`
@@ -100,12 +105,13 @@ export default function BuddyAccept() {
     ? '扫码识别协议尚未接通，请在卡博士 App 内使用诗得丽扫一扫'
     : view.kind === 'failed' ? view.message
       : view.kind === 'demo-complete' ? '这只是 H5 演示，不会创建或保存真实搭子关系'
+        : view.kind === 'request-sent' ? '等待对方在通知中确认；确认后你们才能成为搭子'
         : relationship === 'self' ? '自己的二维码无法用于成为搭子'
             : relationship === 'unavailable' ? '请确认二维码仍可使用'
               : preview?.demo ? '演示用户，仅验证确认交互，不会绑定真实账号'
                 : preview?.confirmationAvailable === false
                   ? '已识别邀请人；后台暂未开放二维码添加好友接口'
-                  : '确认后你们将成为洗头搭子'
+                  : '添加后将发送好友申请；对方确认后才能成为搭子'
 
   return (
     <>
@@ -146,7 +152,7 @@ export default function BuddyAccept() {
             onClick={() => setRetry(v => v + 1)}>重新查询</Button>
         )}
         <Button variant="ghost" disabled={sending} className="mt-2 w-full rounded-full" onClick={dismiss}>
-          {view.kind === 'demo-complete' ? '关闭演示' : '取消'}
+          {view.kind === 'demo-complete' ? '关闭演示' : view.kind === 'request-sent' ? '完成' : '取消'}
         </Button>
       </PromptOverlay>
     </>
