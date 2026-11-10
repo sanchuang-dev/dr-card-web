@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { runtimePolicy } from '../app/config/runtime'
+import { MALL_SEARCH_PATH } from '../app/router/mallSearch'
 import { Button, LoadingIndicator } from '../components/ui'
 import {
   MALL_SHOPS,
@@ -33,12 +34,15 @@ const PROFILE_MALL_PATHS = new Set([
  */
 export default function MallWebView({ target }: MallWebViewProps) {
   const location = useLocation()
-  const mallTarget = target ?? resolveMallTarget()
-  const shop = MALL_SHOPS[mallTarget]
-  // Only allow the two profile destinations requested by product. Preserve the configured
-  // shop base path (e.g. /h5) and never accept arbitrary URLs from the query string.
+  // A fixed, allowlisted search link always opens the first-party shop requested by product,
+  // even if the default Mall tab is configured to use a different shop.
   const requestedPath = new URLSearchParams(location.search).get('path')
-  const mallPath = requestedPath && PROFILE_MALL_PATHS.has(requestedPath)
+  const isProductSearch = requestedPath === MALL_SEARCH_PATH
+  const mallTarget = isProductSearch ? 'kbs_shop' : (target ?? resolveMallTarget())
+  const shop = MALL_SHOPS[mallTarget]
+  // Allow only known routes; query-string URLs cannot select arbitrary origins or paths.
+  const mallPath = requestedPath &&
+    (isProductSearch || PROFILE_MALL_PATHS.has(requestedPath))
     ? requestedPath
     : null
   const targetUrl = new URL(shop.url)
