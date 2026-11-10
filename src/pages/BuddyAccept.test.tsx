@@ -21,7 +21,7 @@ vi.mock('../services/buddyRelations', async () => {
   const actual = await vi.importActual<typeof import('../services/buddyRelations')>('../services/buddyRelations')
   return { ...actual, previewBuddyQr: mocks.preview, acceptBuddyQr: mocks.accept }
 })
-vi.mock('./DearseedColumn', () => ({ default: () => <div data-testid="dearseed-background" /> }))
+vi.mock('./Home', () => ({ default: () => <div data-testid="current-home-background" /> }))
 
 import BuddyAccept from './BuddyAccept'
 
@@ -52,9 +52,10 @@ describe('H5 scan invite confirmation', () => {
     mount({ source: 'native-buddy-recognition', raw: 'https://example.com/buddy/invite/scan?token=opaque-identifier-12345678' })
     await waitFor(() => expect(screen.getByText(/后台邀请人邀请你成为洗头搭子/)).toBeTruthy())
     expect(screen.getByText(/当前版本暂不支持解除关系/)).toBeTruthy()
+    expect(screen.getByTestId('current-home-background')).toBeTruthy()
     expect(mocks.accept).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    expect(mocks.patch).toHaveBeenCalledWith({ state: 'dismissed' })
+    expect(mocks.navigate).toHaveBeenCalledWith('/', { debug: null }, { replace: true })
     expect(mocks.accept).not.toHaveBeenCalled()
   })
 
@@ -62,8 +63,8 @@ describe('H5 scan invite confirmation', () => {
     mocks.preview.mockResolvedValue({ inviter, relationship: 'available', demo: true })
     mocks.accept.mockResolvedValue({ result: 'demo-only', demo: true })
     mount()
-    await waitFor(() => expect(screen.getByRole('button', { name: /演示确认/ })).toBeTruthy())
-    fireEvent.click(screen.getByRole('button', { name: /演示确认/ }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /演示添加/ })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: /演示添加/ }))
     await waitFor(() => expect(screen.getByText(/不会创建或保存真实搭子关系/)).toBeTruthy())
     expect(mocks.navigate).not.toHaveBeenCalled()
   })
@@ -72,12 +73,12 @@ describe('H5 scan invite confirmation', () => {
     mocks.preview.mockResolvedValue({ inviter, relationship: 'self', demo: false })
     const { unmount } = mount()
     await waitFor(() => expect(screen.getByText('不能邀请自己')).toBeTruthy())
-    expect(screen.queryByRole('button', { name: '确认成为搭子' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '添加好友' })).toBeNull()
     unmount()
     mocks.preview.mockResolvedValue({ inviter, relationship: 'already-buddies', demo: false })
     mount()
     await waitFor(() => expect(screen.getByText('你们已经是搭子啦')).toBeTruthy())
-    expect(screen.getByRole('button', { name: '查看我的搭子' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '添加好友' })).toBeTruthy()
     expect(mocks.accept).not.toHaveBeenCalled()
   })
 
@@ -91,8 +92,8 @@ describe('H5 scan invite confirmation', () => {
     })
     mount({ source: 'native-buddy-recognition', raw: 'https://kbs.3cgroup.cn/buddy/invite/scan?code=550e8400-e29b-41d4-a716-446655440000' })
     await waitFor(() => expect(screen.getByText(/真实邀请人邀请你成为洗头搭子/)).toBeTruthy())
-    expect(screen.getByText(/后台尚未开放二维码确认/)).toBeTruthy()
-    expect((screen.getByRole('button', { name: '确认成为搭子' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/后台暂未开放二维码添加好友接口/)).toBeTruthy()
+    expect((screen.getByRole('button', { name: '添加好友' }) as HTMLButtonElement).disabled).toBe(true)
     expect(mocks.accept).not.toHaveBeenCalled()
   })
 
@@ -101,7 +102,7 @@ describe('H5 scan invite confirmation', () => {
     mount()
     await waitFor(() => expect(screen.getByText('等待诗得丽扫码结果')).toBeTruthy())
     expect(mocks.preview).not.toHaveBeenCalled()
-    expect(screen.queryByRole('button', { name: '确认成为搭子' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '添加好友' })).toBeNull()
   })
 
   it('retains failed preview and retries without writing a relation', async () => {
@@ -110,7 +111,7 @@ describe('H5 scan invite confirmation', () => {
     mount()
     await waitFor(() => expect(screen.getByText('网络异常，请稍后重试')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: '重新查询' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: /演示确认/ })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: /演示添加/ })).toBeTruthy())
     expect(mocks.accept).not.toHaveBeenCalled()
   })
 })
