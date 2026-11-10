@@ -93,6 +93,30 @@ export async function sendBackendBuddyApplication(phone: string): Promise<void> 
   })
 }
 
+/** The same Friends.add endpoint accepts a validated target user ID for QR invitations.
+ * Source 20 identifies a QR application; status 10 is pending until the recipient accepts.
+ * Verified against the kbs/API Friends controller, validator, service and api-buddy.md.
+ */
+export async function sendBackendBuddyQrApplication(friendId: string): Promise<void> {
+  if (!/^[1-9]\d*$/.test(friendId) ||
+      !Number.isSafeInteger(Number(friendId)) || Number(friendId) > 4294967295) {
+    throw new Error('邀请人用户编号无效')
+  }
+  const targetId = Number(friendId)
+  const response = await httpClient.request<unknown>({
+    method: 'POST',
+    url: BUDDY_FRIENDS_ADD_PATH,
+    data: { friend_id: targetId, source: 20 },
+  })
+  parseApiEnvelope(response, friendRequestSchema.extend({
+    friend_id: z.literal(targetId),
+    source: z.literal(20),
+  }), {
+    contract: 'buddy.friends.add.qr',
+    fallbackMessage: '二维码好友申请发送失败',
+  })
+}
+
 const friendAgreeSchema = z.object({
   id: z.number().int().positive(),
   status: z.literal(20),
