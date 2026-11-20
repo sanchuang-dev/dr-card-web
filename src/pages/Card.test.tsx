@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   fetchMyCoupons: vi.fn(),
   fetchRedeemedLocalCards: vi.fn(),
   handleScan: vi.fn(),
+  scanSupported: true,
+  scanPending: false,
   scanFeedbackAfterScan: null as { message: string; status: 'warning' | 'danger' } | null,
 }))
 
@@ -19,7 +21,7 @@ vi.mock('../components/mobile/useMainTabScan', async () => {
         mocks.handleScan()
         if (mocks.scanFeedbackAfterScan) setScanFeedback(mocks.scanFeedbackAfterScan)
       }
-      return { handleScan, scanFeedback }
+      return { handleScan, scanFeedback, scanSupported: mocks.scanSupported, scanPending: mocks.scanPending }
     },
   }
 })
@@ -148,6 +150,8 @@ beforeEach(() => {
 afterEach(() => {
   mocks.fetchMyCoupons.mockReset()
   mocks.fetchRedeemedLocalCards.mockReset()
+  mocks.scanSupported = true
+  mocks.scanPending = false
   mocks.scanFeedbackAfterScan = null
 })
 
@@ -343,6 +347,21 @@ describe('Card MyCoupons integration', () => {
     await waitFor(() => expect(container.querySelector('[role="dialog"]')).toBeNull())
   })
 
+
+  it('disables card scanning when the main tab scanner is unavailable', async () => {
+    mocks.scanSupported = false
+    mocks.fetchMyCoupons.mockResolvedValue(page('unused'))
+    renderCard()
+    await screen.findByText('新人体验活动')
+
+    fireEvent.click(screen.getByRole('button', { name: '使用' }))
+    expect(await screen.findByRole('dialog', { name: '使用体验券' })).toBeTruthy()
+    const scanButton = screen.getByRole('button', { name: /扫码核销/ }) as HTMLButtonElement
+    expect(scanButton.disabled).toBe(true)
+    fireEvent.click(scanButton)
+    expect(mocks.handleScan).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: '使用体验券' })).toBeTruthy()
+  })
 
   it('shows recoverable feedback from the card scanner after the use sheet closes', async () => {
     mocks.scanFeedbackAfterScan = { message: '请允许相机权限后重试', status: 'danger' }
