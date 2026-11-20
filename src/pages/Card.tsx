@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CalendarDays, Check, Clock, Info, KeyRound, QrCode, ReceiptText, Ticket, X } from 'lucide-react'
 import DebugPanel from '../components/mobile/DebugPanel'
 import PageContainer from '../components/mobile/PageContainer'
-import { Button, EmptyState, Skeleton } from '../components/ui'
+import { Button, EmptyState, Skeleton, Toast } from '../components/ui'
 import { useMainTabScan } from '../components/mobile/useMainTabScan'
 import { isAppError } from '../lib/appError'
 import { useFixtureState, useOverlay } from '../app/fixtures/useFixture'
@@ -296,7 +296,7 @@ export default function Card() {
   const route = findRouteByPathname('/card')
   const { state } = useFixtureState(route)
   const { overlay, close } = useOverlay()
-  const { handleScan } = useMainTabScan({ enabled: overlay === 'use' })
+  const { handleScan, scanFeedback } = useMainTabScan({ enabled: overlay === 'use' })
   const [searchParams, setSearchParams] = useSearchParams()
   const apiProbeEnabled = import.meta.env.DEV && searchParams.get('apiProbe') === '1'
   const apiProbeSigned = Boolean(import.meta.env.VITE_CARD_API_TOKEN && import.meta.env.VITE_CARD_API_SALT)
@@ -710,6 +710,12 @@ export default function Card() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {scanFeedback && (
+        <div className="fixed bottom-[calc(64px+env(safe-area-inset-bottom)+12px)] left-1/2 z-[60] -translate-x-1/2">
+          <Toast message={scanFeedback.message} status={scanFeedback.status} />
         </div>
       )}
 
