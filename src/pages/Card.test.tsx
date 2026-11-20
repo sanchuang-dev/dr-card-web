@@ -343,7 +343,7 @@ describe('Card MyCoupons integration', () => {
     expect(await screen.findByRole('dialog', { name: '使用体验券' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /扫码核销/ }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('请允许相机权限后重试')
+    expect((await screen.findByRole('alert')).textContent).toContain('请允许相机权限后重试')
     expect(container.querySelector('[role="dialog"]')).toBeNull()
   })
 
