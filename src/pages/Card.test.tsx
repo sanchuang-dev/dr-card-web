@@ -332,7 +332,6 @@ describe('Card MyCoupons integration', () => {
     expect(screen.queryByText('核心洗发水体验券')).toBeNull()
   })
   it('starts the shared main-tab scanner from the use sheet without navigating to a scan page', async () => {
-    mocks.overlay = 'use'
     mocks.fetchMyCoupons.mockResolvedValue(page('unused'))
     const { container } = renderCard()
     await screen.findByText('新人体验活动')
