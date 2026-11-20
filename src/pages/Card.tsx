@@ -296,7 +296,7 @@ export default function Card() {
   const route = findRouteByPathname('/card')
   const { state } = useFixtureState(route)
   const { overlay, close } = useOverlay()
-  const { handleScan, scanFeedback } = useMainTabScan({ enabled: overlay === 'use' })
+  const { scanSupported, scanPending, handleScan, scanFeedback } = useMainTabScan({ enabled: overlay === 'use' })
   const [searchParams, setSearchParams] = useSearchParams()
   const apiProbeEnabled = import.meta.env.DEV && searchParams.get('apiProbe') === '1'
   const apiProbeSigned = Boolean(import.meta.env.VITE_CARD_API_TOKEN && import.meta.env.VITE_CARD_API_SALT)
@@ -679,7 +679,8 @@ export default function Card() {
                     close()
                     void handleScan()
                   }}
-                  className="flex h-20 w-full items-center gap-3 rounded-pill bg-surface-subtle p-3 text-left active:bg-surface-selected"
+                  disabled={!scanSupported || scanPending}
+                  className="flex h-20 w-full items-center gap-3 rounded-pill bg-surface-subtle p-3 text-left active:bg-surface-selected disabled:opacity-50"
                 >
                   <span className="flex h-10 w-10 flex-none items-center justify-center self-center rounded-full bg-surface text-reward-strong shadow-sm">
                     <QrCode className="h-5 w-5" />
