@@ -1,14 +1,30 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   fetchMyCoupons: vi.fn(),
   fetchRedeemedLocalCards: vi.fn(),
-  overlay: null as string | null,
-  close: vi.fn(),
+  handleScan: vi.fn(),
+  scanSupported: true,
+  scanPending: false,
+  scanFeedbackAfterScan: null as { message: string; status: 'warning' | 'danger' } | null,
 }))
+
+vi.mock('../components/mobile/useMainTabScan', async () => {
+  const React = await import('react')
+  return {
+    useMainTabScan: () => {
+      const [scanFeedback, setScanFeedback] = React.useState(mocks.scanFeedbackAfterScan)
+      const handleScan = () => {
+        mocks.handleScan()
+        if (mocks.scanFeedbackAfterScan) setScanFeedback(mocks.scanFeedbackAfterScan)
+      }
+      return { handleScan, scanFeedback, scanSupported: mocks.scanSupported, scanPending: mocks.scanPending }
+    },
+  }
+})
 
 vi.mock('../services/myCoupons', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../services/myCoupons')>()
@@ -23,10 +39,10 @@ vi.mock('../services/cardPackageProbe', () => ({
   probeDiscountCardList: vi.fn(),
 }))
 
-vi.mock('../app/fixtures/useFixture', () => ({
-  useFixtureState: () => ({ state: null }),
-  useOverlay: () => ({ overlay: mocks.overlay, close: mocks.close }),
-}))
+vi.mock('../app/fixtures/useFixture', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../app/fixtures/useFixture')>()
+  return { ...actual, useFixtureState: () => ({ state: null }) }
+})
 
 vi.mock('../app/router/routes', () => ({
   findRouteByPathname: () => ({ path: '/card' }),
@@ -41,6 +57,7 @@ vi.mock('../components/mobile/PageContainer', () => ({
 }))
 
 import Card from './Card'
+import { protectedFixtureRedirect } from '../app/fixtures/useFixture'
 
 function page(type: 'unused' | 'used' | 'out_of_date') {
   if (type === 'unused') {
@@ -105,10 +122,23 @@ function page(type: 'unused' | 'used' | 'out_of_date') {
   }
 }
 
+
+function FixtureStateGuard({ children }: { children: ReactNode }) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const redirect = protectedFixtureRedirect(location)
+
+  useEffect(() => {
+    if (redirect) navigate(redirect.to, { replace: true, state: redirect.state })
+  }, [location.key, navigate])
+
+  return <>{children}</>
+}
+
 function renderCard(entry = '/card') {
   return render(
     <MemoryRouter initialEntries={[entry]}>
-      <Card />
+      <FixtureStateGuard><Card /></FixtureStateGuard>
     </MemoryRouter>,
   )
 }
@@ -120,8 +150,9 @@ beforeEach(() => {
 afterEach(() => {
   mocks.fetchMyCoupons.mockReset()
   mocks.fetchRedeemedLocalCards.mockReset()
-  mocks.overlay = null
-  mocks.close.mockReset()
+  mocks.scanSupported = true
+  mocks.scanPending = false
+  mocks.scanFeedbackAfterScan = null
 })
 
 describe('Card MyCoupons integration', () => {
@@ -288,7 +319,6 @@ describe('Card MyCoupons integration', () => {
   })
 
   it('does not use the fixture coupon for an unmatched API-mode deep link', async () => {
-    mocks.overlay = 'use'
     mocks.fetchMyCoupons.mockResolvedValue({
       data: [],
       current_page: 1,
@@ -305,6 +335,61 @@ describe('Card MyCoupons integration', () => {
     expect(screen.queryByRole('dialog', { name: '使用体验券' })).toBeNull()
     expect(screen.queryByText('核心洗发水体验券')).toBeNull()
   })
+  it('starts the shared main-tab scanner from the use sheet without navigating to a scan page', async () => {
+    mocks.fetchMyCoupons.mockResolvedValue(page('unused'))
+    const { container } = renderCard()
+    await screen.findByText('新人体验活动')
+    fireEvent.click(screen.getByRole('button', { name: '使用' }))
+    expect(await screen.findByRole('dialog', { name: '使用体验券' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /扫码核销/ }))
+    expect(mocks.handleScan).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(container.querySelector('[role="dialog"]')).toBeNull())
+  })
+
+
+  it('disables card scanning when the main tab scanner is unavailable', async () => {
+    mocks.scanSupported = false
+    mocks.fetchMyCoupons.mockResolvedValue(page('unused'))
+    renderCard()
+    await screen.findByText('新人体验活动')
+
+    fireEvent.click(screen.getByRole('button', { name: '使用' }))
+    expect(await screen.findByRole('dialog', { name: '使用体验券' })).toBeTruthy()
+    const scanButton = screen.getByRole('button', { name: /扫码核销/ }) as HTMLButtonElement
+    expect(scanButton.disabled).toBe(true)
+    fireEvent.click(scanButton)
+    expect(mocks.handleScan).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: '使用体验券' })).toBeTruthy()
+  })
+
+  it('shows recoverable feedback from the card scanner after the use sheet closes', async () => {
+    mocks.scanFeedbackAfterScan = { message: '请允许相机权限后重试', status: 'danger' }
+    mocks.fetchMyCoupons.mockResolvedValue(page('unused'))
+    const { container } = renderCard()
+    await screen.findByText('新人体验活动')
+
+    fireEvent.click(screen.getByRole('button', { name: '使用' }))
+    expect(await screen.findByRole('dialog', { name: '使用体验券' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /扫码核销/ }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('请允许相机权限后重试')
+    expect(container.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it('keeps 消费密码核销 as a static instruction with no navigation or click action', async () => {
+    mocks.fetchMyCoupons.mockResolvedValue(page('unused'))
+    const { container } = renderCard()
+    await screen.findByText('新人体验活动')
+    fireEvent.click(screen.getByRole('button', { name: '使用' }))
+    expect(await screen.findByRole('dialog', { name: '使用体验券' })).toBeTruthy()
+
+    expect(screen.getByText('消费密码核销')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /消费密码核销/ })).toBeNull()
+    expect(container.querySelector('a[href="/card/verify/password"]')).toBeNull()
+    expect(mocks.handleScan).not.toHaveBeenCalled()
+  })
+
 })
 
 describe('Card redeemed local source=60 integration', () => {
