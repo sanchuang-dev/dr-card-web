@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -37,22 +37,9 @@ vi.mock('../services/cardPackageProbe', () => ({
   probeDiscountCardList: vi.fn(),
 }))
 
-vi.mock('../app/fixtures/useFixture', async () => {
-  const { useSearchParams } = await import('react-router-dom')
-  return {
-    useFixtureState: () => ({ state: null }),
-    useOverlay: () => {
-      const [searchParams, setSearchParams] = useSearchParams()
-      return {
-        overlay: searchParams.get('overlay'),
-        close: () => setSearchParams((previous) => {
-          const next = new URLSearchParams(previous)
-          next.delete('overlay')
-          return next
-        }, { replace: true }),
-      }
-    },
-  }
+vi.mock('../app/fixtures/useFixture', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../app/fixtures/useFixture')>()
+  return { ...actual, useFixtureState: () => ({ state: null }) }
 })
 
 vi.mock('../app/router/routes', () => ({
@@ -68,6 +55,7 @@ vi.mock('../components/mobile/PageContainer', () => ({
 }))
 
 import Card from './Card'
+import { protectedFixtureRedirect } from '../app/fixtures/useFixture'
 
 function page(type: 'unused' | 'used' | 'out_of_date') {
   if (type === 'unused') {
@@ -132,10 +120,23 @@ function page(type: 'unused' | 'used' | 'out_of_date') {
   }
 }
 
+
+function FixtureStateGuard({ children }: { children: ReactNode }) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const redirect = protectedFixtureRedirect(location)
+
+  useEffect(() => {
+    if (redirect) navigate(redirect.to, { replace: true, state: redirect.state })
+  }, [location.key, navigate])
+
+  return <>{children}</>
+}
+
 function renderCard(entry = '/card') {
   return render(
     <MemoryRouter initialEntries={[entry]}>
-      <Card />
+      <FixtureStateGuard><Card /></FixtureStateGuard>
     </MemoryRouter>,
   )
 }
