@@ -4,6 +4,7 @@ import { CalendarDays, Check, Clock, Info, KeyRound, QrCode, ReceiptText, Ticket
 import DebugPanel from '../components/mobile/DebugPanel'
 import PageContainer from '../components/mobile/PageContainer'
 import { Button, EmptyState, Skeleton } from '../components/ui'
+import { useMainTabScan } from '../components/mobile/useMainTabScan'
 import { isAppError } from '../lib/appError'
 import { useFixtureState, useOverlay } from '../app/fixtures/useFixture'
 import { findRouteByPathname } from '../app/router/routes'
@@ -295,6 +296,7 @@ export default function Card() {
   const route = findRouteByPathname('/card')
   const { state } = useFixtureState(route)
   const { overlay, close } = useOverlay()
+  const { handleScan } = useMainTabScan({ enabled: overlay === 'use' })
   const [searchParams, setSearchParams] = useSearchParams()
   const apiProbeEnabled = import.meta.env.DEV && searchParams.get('apiProbe') === '1'
   const apiProbeSigned = Boolean(import.meta.env.VITE_CARD_API_TOKEN && import.meta.env.VITE_CARD_API_SALT)
@@ -673,7 +675,10 @@ export default function Card() {
                  *  扫码/密码两行文案长度不同，靠固定高度 + flex 居中让两个 pill 视觉一致。 */}
                 <button
                   type="button"
-                  onClick={() => navigate('/card/verify')}
+                  onClick={() => {
+                    close()
+                    void handleScan()
+                  }}
                   className="flex h-20 w-full items-center gap-3 rounded-pill bg-surface-subtle p-3 text-left active:bg-surface-selected"
                 >
                   <span className="flex h-10 w-10 flex-none items-center justify-center self-center rounded-full bg-surface text-reward-strong shadow-sm">
@@ -686,11 +691,7 @@ export default function Card() {
                     </span>
                   </span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => navigate('/card/verify/password')}
-                  className="flex h-20 w-full items-center gap-3 rounded-pill bg-surface-subtle p-3 text-left active:bg-surface-selected"
-                >
+                <div className="flex h-20 w-full items-center gap-3 rounded-pill bg-surface-subtle p-3 text-left">
                   <span className="flex h-10 w-10 flex-none items-center justify-center self-center rounded-full bg-surface text-reward-strong shadow-sm">
                     <KeyRound className="h-5 w-5" />
                   </span>
@@ -700,7 +701,7 @@ export default function Card() {
                       {COUPON_USE_GUIDE.passwordHint}
                     </span>
                   </span>
-                </button>
+                </div>
               </div>
 
               <div className="mt-3 flex items-start gap-2 rounded-lg bg-surface-subtle p-3">
