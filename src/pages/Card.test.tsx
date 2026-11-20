@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   fetchMyCoupons: vi.fn(),
   fetchRedeemedLocalCards: vi.fn(),
-  overlay: null as string | null,
   handleScan: vi.fn(),
   scanFeedbackAfterScan: null as { message: string; status: 'warning' | 'danger' } | null,
 }))
@@ -38,9 +37,22 @@ vi.mock('../services/cardPackageProbe', () => ({
   probeDiscountCardList: vi.fn(),
 }))
 
-vi.mock('../app/fixtures/useFixture', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../app/fixtures/useFixture')>()
-  return { ...actual, useFixtureState: () => ({ state: null }) }
+vi.mock('../app/fixtures/useFixture', async () => {
+  const { useSearchParams } = await import('react-router-dom')
+  return {
+    useFixtureState: () => ({ state: null }),
+    useOverlay: () => {
+      const [searchParams, setSearchParams] = useSearchParams()
+      return {
+        overlay: searchParams.get('overlay'),
+        close: () => setSearchParams((previous) => {
+          const next = new URLSearchParams(previous)
+          next.delete('overlay')
+          return next
+        }, { replace: true }),
+      }
+    },
+  }
 })
 
 vi.mock('../app/router/routes', () => ({
@@ -135,7 +147,6 @@ beforeEach(() => {
 afterEach(() => {
   mocks.fetchMyCoupons.mockReset()
   mocks.fetchRedeemedLocalCards.mockReset()
-  mocks.overlay = null
   mocks.scanFeedbackAfterScan = null
 })
 
