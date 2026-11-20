@@ -7,13 +7,23 @@ const mocks = vi.hoisted(() => ({
   fetchMyCoupons: vi.fn(),
   fetchRedeemedLocalCards: vi.fn(),
   overlay: null as string | null,
-  close: vi.fn(),
   handleScan: vi.fn(),
+  scanFeedbackAfterScan: null as { message: string; status: 'warning' | 'danger' } | null,
 }))
 
-vi.mock('../components/mobile/useMainTabScan', () => ({
-  useMainTabScan: () => ({ handleScan: mocks.handleScan }),
-}))
+vi.mock('../components/mobile/useMainTabScan', async () => {
+  const React = await import('react')
+  return {
+    useMainTabScan: () => {
+      const [scanFeedback, setScanFeedback] = React.useState(mocks.scanFeedbackAfterScan)
+      const handleScan = () => {
+        mocks.handleScan()
+        if (mocks.scanFeedbackAfterScan) setScanFeedback(mocks.scanFeedbackAfterScan)
+      }
+      return { handleScan, scanFeedback }
+    },
+  }
+})
 
 vi.mock('../services/myCoupons', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../services/myCoupons')>()
@@ -28,10 +38,10 @@ vi.mock('../services/cardPackageProbe', () => ({
   probeDiscountCardList: vi.fn(),
 }))
 
-vi.mock('../app/fixtures/useFixture', () => ({
-  useFixtureState: () => ({ state: null }),
-  useOverlay: () => ({ overlay: mocks.overlay, close: mocks.close }),
-}))
+vi.mock('../app/fixtures/useFixture', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../app/fixtures/useFixture')>()
+  return { ...actual, useFixtureState: () => ({ state: null }) }
+})
 
 vi.mock('../app/router/routes', () => ({
   findRouteByPathname: () => ({ path: '/card' }),
@@ -126,7 +136,7 @@ afterEach(() => {
   mocks.fetchMyCoupons.mockReset()
   mocks.fetchRedeemedLocalCards.mockReset()
   mocks.overlay = null
-  mocks.close.mockReset()
+  mocks.scanFeedbackAfterScan = null
 })
 
 describe('Card MyCoupons integration', () => {
@@ -293,7 +303,6 @@ describe('Card MyCoupons integration', () => {
   })
 
   it('does not use the fixture coupon for an unmatched API-mode deep link', async () => {
-    mocks.overlay = 'use'
     mocks.fetchMyCoupons.mockResolvedValue({
       data: [],
       current_page: 1,
@@ -319,8 +328,22 @@ describe('Card MyCoupons integration', () => {
     expect(await screen.findByRole('dialog', { name: '使用体验券' })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: /扫码核销/ }))
-    expect(mocks.close).toHaveBeenCalled()
     expect(mocks.handleScan).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(container.querySelector('[role="dialog"]')).toBeNull())
+  })
+
+
+  it('shows recoverable feedback from the card scanner after the use sheet closes', async () => {
+    mocks.scanFeedbackAfterScan = { message: '请允许相机权限后重试', status: 'danger' }
+    mocks.fetchMyCoupons.mockResolvedValue(page('unused'))
+    const { container } = renderCard()
+    await screen.findByText('新人体验活动')
+
+    fireEvent.click(screen.getByRole('button', { name: '使用' }))
+    expect(await screen.findByRole('dialog', { name: '使用体验券' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /扫码核销/ }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('请允许相机权限后重试')
     expect(container.querySelector('[role="dialog"]')).toBeNull()
   })
 
