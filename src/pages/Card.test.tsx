@@ -8,6 +8,11 @@ const mocks = vi.hoisted(() => ({
   fetchRedeemedLocalCards: vi.fn(),
   overlay: null as string | null,
   close: vi.fn(),
+  handleScan: vi.fn(),
+}))
+
+vi.mock('../components/mobile/useMainTabScan', () => ({
+  useMainTabScan: () => ({ handleScan: mocks.handleScan }),
 }))
 
 vi.mock('../services/myCoupons', async (importOriginal) => {
@@ -305,6 +310,32 @@ describe('Card MyCoupons integration', () => {
     expect(screen.queryByRole('dialog', { name: '使用体验券' })).toBeNull()
     expect(screen.queryByText('核心洗发水体验券')).toBeNull()
   })
+  it('starts the shared main-tab scanner from the use sheet without navigating to a scan page', async () => {
+    mocks.fetchMyCoupons.mockResolvedValue(page('unused'))
+    const { container } = renderCard()
+    await screen.findByText('新人体验活动')
+    fireEvent.click(screen.getByRole('button', { name: '使用' }))
+    expect(await screen.findByRole('dialog', { name: '使用体验券' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /扫码核销/ }))
+    expect(mocks.close).toHaveBeenCalled()
+    expect(mocks.handleScan).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it('keeps 消费密码核销 as a static instruction with no navigation or click action', async () => {
+    mocks.fetchMyCoupons.mockResolvedValue(page('unused'))
+    const { container } = renderCard()
+    await screen.findByText('新人体验活动')
+    fireEvent.click(screen.getByRole('button', { name: '使用' }))
+    expect(await screen.findByRole('dialog', { name: '使用体验券' })).toBeTruthy()
+
+    expect(screen.getByText('消费密码核销')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /消费密码核销/ })).toBeNull()
+    expect(container.querySelector('a[href="/card/verify/password"]')).toBeNull()
+    expect(mocks.handleScan).not.toHaveBeenCalled()
+  })
+
 })
 
 describe('Card redeemed local source=60 integration', () => {
